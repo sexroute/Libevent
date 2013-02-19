@@ -2100,11 +2100,11 @@ server_port_free(struct evdns_server_port *port)
 	EVUTIL_ASSERT(port);
 	EVUTIL_ASSERT(!port->refcnt);
 	EVUTIL_ASSERT(!port->pending_replies);
+	(void) event_del(&port->event);
 	if (port->socket > 0) {
 		evutil_closesocket(port->socket);
 		port->socket = -1;
 	}
-	(void) event_del(&port->event);
 	event_debug_unassign(&port->event);
 	EVTHREAD_FREE_LOCK(port->lock, EVTHREAD_LOCKTYPE_RECURSIVE);
 	mm_free(port);
@@ -3925,9 +3925,9 @@ evdns_err_to_string(int err)
 static void
 evdns_nameserver_free(struct nameserver *server)
 {
-	if (server->socket >= 0)
-	evutil_closesocket(server->socket);
 	(void) event_del(&server->event);
+	if (server->socket >= 0)
+		evutil_closesocket(server->socket);
 	event_debug_unassign(&server->event);
 	if (server->state == 0)
 		(void) event_del(&server->timeout_event);

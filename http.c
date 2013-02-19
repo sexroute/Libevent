@@ -1239,6 +1239,7 @@ evhttp_connection_reset(struct evhttp_connection *evcon)
 		if (evhttp_connected(evcon) && evcon->closecb != NULL)
 			(*evcon->closecb)(evcon, evcon->closecb_arg);
 
+		bufferevent_setfd(evcon->bufev, -1);
 		shutdown(evcon->fd, EVUTIL_SHUT_WR);
 		evutil_closesocket(evcon->fd);
 		evcon->fd = -1;
