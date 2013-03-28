@@ -1,0 +1,78 @@
+
+Stuff that must keep working:
+  void *arg = event_get_callback_arg(e);
+  event_free(e);
+  free(arg);
+
+
+  void *arg = event_get_callback_arg(&e);
+  event_del(e);
+  free(arg);
+
+
+==============================
+
+By default, retain current behavior.
+
+If an event is marked with a finalized flag, then event_del can run while a
+callback is running, but you MUST finalize the event before you can call
+event_free() on it or let it otherwise go out of existence.
+
+When you finalize an event, you MAY give it a finalization callback taking
+the event and its current cb argument.  {{{You MAY indicate a flag that the
+finalization callback should run immediately if possible.}}}
+
+When an event is finalized, all of this happens while holding the event_base
+lock:
+   - If the event is pending or active, it is deleted.
+   - The event is set to a "finalizing" state.  It can no longer be the
+     subject of event_add or event_active; event_del always returns
+     immediately without doing anything.
+   - If there's a callback provided, or the event is getting finalized via
+     event_free():
+     - The event's callback it set; its callback type are set to 'finalize'.
+     - The event is added to an appropriate active queue.
+   - But if the callback is a special 'BLOCK' flag: The finalize call
+     blocks.
+
+And then when the callback is run:
+   - The event is finalized.  The provided callback is invoked.  If it was
+     finalized via event_free_finalize(), it is also freed.
+
+
+API:
+   EV_FINALIZED
+
+   event_del_noblock()
+   event_del_block()
+   event_finalize(flags, ev, finalize_cb, arg)
+   event_free_finalized(flags, ev, finalize_cb, arg)
+
+INTERNAL:
+   event_finalize_many(flags, ev[], finalize_cb, arg)
+   event_finalize_many_cbs(flags, (ev or evcb)[], finalize_cb, arg)
+
+
+IMPLEMENTATION NOTES:
+
+   Add flags and fields as needed.
+
+   When a finalize-cb is set, make it get called, and make the thing get
+   freed as appropriate.
+
+   Allow user to set the EV_FINALIZED flag.
+
+   If the EV_FINALIZED flag is set, event_debug most should warn about
+   non-finalized events somehow?
+
+   When nonblocking delete flag is set, use nonblocking delete by default.
+   Add del_block and del_noblock.
+
+   Implement event_finalize, event_free_finalize.
+
+   Implement BLOCK flag to event_free{,_finalize}.
+
+   Implement IMMED flag to event_free{,_finalize}.
+
+   
+
