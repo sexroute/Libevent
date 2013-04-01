@@ -55,24 +55,80 @@ INTERNAL:
 
 IMPLEMENTATION NOTES:
 
-   Add flags and fields as needed.
+ o Add flags and fields as needed.
 
-   When a finalize-cb is set, make it get called, and make the thing get
+ o When a finalize-cb is set, make it get called, and make the thing get
    freed as appropriate.
 
-   Allow user to set the EV_FINALIZED flag.
+ o Allow user to set the EV_FINALIZE flag.
 
-   If the EV_FINALIZED flag is set, event_debug most should warn about
+ - If the EV_FINALIZE flag is set, event_debug most should warn about
    non-finalized events somehow?
 
-   When nonblocking delete flag is set, use nonblocking delete by default.
+ - event_finalize, event_free should be a valid way to proceed according to
+   event_debug_mode.
+
+ o When nonblocking delete flag is set, use nonblocking delete by default.
    Add del_block and del_noblock.
 
-   Implement event_finalize, event_free_finalize.
+ o Implement event_finalize, event_free_finalize.
+
+ o Make it impossible to add/del/activate/etc a finalizing event.
+
+ o Make an evcb_finalize that finalizes any callable.
+
+   Make sure that event_free() works after event_finalize() callback is done.
+
+   Make an "everything is finalized except as noted" feature.
 
    Implement BLOCK flag to event_free{,_finalize}.
 
    Implement IMMED flag to event_free{,_finalize}.
 
-   
+ o (Implement finalize-many internal API.)
 
+   Make bufferevent freeing actually work!
+
+   Make finalize callbacks optional
+
+   Fix all XXXX and DOCUMENT things.
+
+   Allow NULL finalize callbacks.
+
+DOABLE TESTS:
+
+
+ . Finalize_many should work
+
+ o Make sure that finalize_free really frees
+
+ o make sure that giving a finalizer from within an active persistent cb
+   works.
+
+ o make sure that giving a finalizer from within an active nonpersistent cb
+   works.
+
+
+   DEADLOCK-RELATED/NEEDS-THREADS:
+
+       No deadlock when deleting during active EV_FINALIZE callback.
+
+       No deadlock when deleting with event_del_noblock()
+
+       Blocking when deleting with event_del_block()
+
+       finalize_many from within another thread
+
+TESTS FOR LATER:
+
+   Finalize callbacks of NULL work
+
+   Bufferevent deadlock test-case (ripped off from email)
+
+   IMMEDIATE flag works
+   BLOCK flag works
+
+
+OPEN ISSUES:
+
+   finalize then re-initialize: How does that work?
