@@ -55,6 +55,8 @@ INTERNAL:
 
 IMPLEMENTATION NOTES:
 
+============================== MINIMAL STUFF FOR BASE
+
  o Add flags and fields as needed.
 
  o When a finalize-cb is set, make it get called, and make the thing get
@@ -62,14 +64,10 @@ IMPLEMENTATION NOTES:
 
  o Allow user to set the EV_FINALIZE flag.
 
- - If the EV_FINALIZE flag is set, event_debug most should warn about
-   non-finalized events somehow?
-
- - event_finalize, event_free should be a valid way to proceed according to
+ o event_finalize, event_free should be a valid way to proceed according to
    event_debug_mode.
 
- o When nonblocking delete flag is set, use nonblocking delete by default.
-   Add del_block and del_noblock.
+ o Make sure that event_free() works after event_finalize() callback is done.
 
  o Implement event_finalize, event_free_finalize.
 
@@ -77,29 +75,9 @@ IMPLEMENTATION NOTES:
 
  o Make an evcb_finalize that finalizes any callable.
 
-   Make sure that event_free() works after event_finalize() callback is done.
+ - Add error codes?
 
-   Make an "everything is finalized except as noted" feature.
-
-   Implement BLOCK flag to event_free{,_finalize}.
-
-   Implement IMMED flag to event_free{,_finalize}.
-
- o (Implement finalize-many internal API.)
-
-   Make bufferevent freeing actually work!
-
-   Make finalize callbacks optional
-
-   Fix all XXXX and DOCUMENT things.
-
-   Allow NULL finalize callbacks.
-
-DOABLE TESTS:
-
-
- . Finalize_many should work
-
+TESTS:
  o Make sure that finalize_free really frees
 
  o make sure that giving a finalizer from within an active persistent cb
@@ -108,8 +86,49 @@ DOABLE TESTS:
  o make sure that giving a finalizer from within an active nonpersistent cb
    works.
 
+ o 
 
-   DEADLOCK-RELATED/NEEDS-THREADS:
+
+ - Fix all XXXX and DOCUMENT things.
+
+
+
+============================== FOR BUFFEREVENTS AND THEIR FRIENDS
+
+ o (Implement finalize-many internal API.)
+
+   o Give it a sane interface: change behavior of finalize_many so that the
+     callback *is* run later, once.  Make sure that it has a plausible
+     argument target?  Same argument target for all? Provide argument
+     target??  Require that they all have the same argument? (YES, THAT.)
+
+ - Make bufferevent finalization work.
+
+ - Make evbuffer finalization work
+
+ - Make evconnlistener finalization work
+
+
+============================== EXTRA STUFF FOR BASE
+
+ - If the EV_FINALIZE flag is set, event_debug most should warn about
+   non-finalized events somehow?
+
+ o When nonblocking delete flag is set, use nonblocking delete by default.
+   Add del_block and del_noblock.
+
+ - Make an "everything is finalized except as noted" feature.
+
+ - Implement BLOCK flag to event_free{,_finalize}.
+
+ - Implement IMMED flag to event_free{,_finalize}.
+
+ - Make finalize callbacks optional (??)
+
+
+============================== TESTS:
+
+============================== DEADLOCK-RELATED/NEEDS-THREADS:
 
        No deadlock when deleting during active EV_FINALIZE callback.
 
