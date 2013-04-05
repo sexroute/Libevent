@@ -1,0 +1,178 @@
+
+
+   Libevent 2.1.x introduces an optional new "finalize" model to
+   avoid some delays and deadlocks in multithreaded applications.
+
+   Here I'll discuss why the solution is necessary, how it works,
+   and how to use it.
+
+   The APIs are not yet set in stone; anything could
+   change. Feedback would be very welcome.
+
+The problem that Libevent 2.0 solved, and how it solved it:
+
+   Since the earliest versions of Libevent, this kind of pattern has
+   been used when finally disabling an event.
+
+       event_del(ev);
+       free(data);  // data was used in ev's callback.
+
+   But that creates a problem for multithreaded code: What if ev's
+   callback is still executing when we call event_del()?  In that
+   case, we had better not let the free() execute until the callback
+   is done running.
+
+   To prevent this, Libevent 2.0 uses a condition variable to block
+   attempts to event_del() the currently executing event.  That way,
+   once the event_del() has completed, the caller can be sure that
+   the callback isn't executing.
+
+The problem that Libevent 2.0 created:
+
+   First, this condition-variable solution sometimes blocks
+   event_del() calls that shouldn't actually need to block.  That
+   wastes time.
+
+   Second, the blocking here makes us prone to deadlock.  Consider
+   what happens when the data structure used in the callback is
+   itself protected by a lock.  Any code that manipulates it needs
+   to do something like:
+
+      acquire_lock(data->lock);
+      // do stuff here
+      if (done_reading)
+              event_del(data->read_event);
+      // do more stuff
+      release_lock(data->lock);
+
+   But the callback also needs the lock, so it probably looks like:
+
+      acquire_lock(data->lock);
+      // handle the event
+      release_lock(data->lock);
+
+   Now suppose that the callback starts executing in the event_loop
+   thread (call it T1) while another thread, T2, is manipulating the
+   data structure.  Now T2 holds the lock, and T1 blocks in
+   acquire_lock() waiting for T2 to release it.  But when T2 calls
+   event_del(), it will block waiting for the callback to complete.
+   Whoops.
+
+   Based on the volume of bug reports, practically nobody ran into
+   this bug on their own while writing new mulithreaded Libevent
+   code, but many people have run into it while using some kinds of
+   buffer event in multithreaded code.
+
+A solution that wouldn't quite work:
+
+   Suppose for the moment that event_assign and event_set don't
+   exist: all events are allocated with event_new(), and all events
+   are events are freed with event_free().
+
+   In this world, we could avoid the deadlock by having event_del()
+   complete immediately, since we know that the event isn't going
+   away unless event_free() is called.  To prevent event_free from
+   blocking while the callback is running, we could have it put the
+   event into a list of events to free, and not actually free the
+   event until it's certainly not running.
+
+   Would that would?  Not quite, because we still have the problem
+   of how to free the user-supplied data for the event's callback.
+   The callback is going to be using it for as long as it's running,
+   so the code that calls event_free() isn't allowed to free it.
+   So we need to know when the event is actually getting freed.
+
+A solution that can work: finalizer callbacks
+
+   The solution seems to be to delay the final cleanup so that it
+   can happen once the event is definitely no longer running.  To do
+   this, we can use Yet Another Kind of Callback.
+
+      typedef void (*event_finalize_callback_fn)(
+              struct event *ev,
+              void *arg);
+
+      event_free_finalize(
+              unsigned int flags,
+              struct event *ev,
+              event_finalize_callback_fn cb);
+
+   With this interface, we can tell Libevent to free the event, and
+   to run a given callback on that event and its user-configured
+   data before the event gets freed.
+
+   We can provide a similar interface for events allocated on the
+   stack or as parts of larger structures:
+
+      event_finalize(
+              unsigned int flags,
+              struct event *ev,
+              event_finalize_callback_fn cb);
+
+   Once you've called event_finalize() or event_free_finalize() on
+   an event, any attempt to event_add() or event_del() or
+   event_active() that event will fail.  Once the provided
+   finalization callback has returned, subsequent.
+
+   To avoid the kind of insanity that made Java finalizers a piece
+   of gibbering madness, the finalizer callback is not allowed to
+   try to un-finalize the event or prevent it from getting freed.
+
+
+Retaining backward compatibility:
+
+   We're not quite done, though.  Remember that our goal here was to
+   make it viable for event_del() to not block while a callback is
+   running.  Because the current event_del() blocks, and some
+   existing code relies on it blocking, we can't just make
+   event_del() nonblocking by default.
+
+   Instead, we provide a flag for marking events as "safe to delete
+   without blocking."  To make event_del() not block when given an
+   event 'ev', just set up that event with the EV_FINALIZE flag when
+   constructing it.
+
+   (The name of this option is in flux.  Do we have a better name
+   for it?)
+
+   (I'm considering whether there shouldn't be an option to make
+   EV_FINALIZE on by default, plus a flag to turn it off for
+   particular events.)
+
+   Additionally, there are now two variants of event_del(): one that
+   always blocks until the event's callback is no longer running,
+   and one that never blocks while the event's callback is running:
+
+      event_del_noblock(ev);
+      event_del_block(ev);
+
+
+What about bufferevents, evbuffers, evconnlisteners, etc?
+
+   They need the same treatment, I think.  Otherwise, the choice is
+   force bufferevent_free() to block while bufferevent callbacks are
+   running (current behavior, problematic), or to make it so that
+
+     bufferevent_free(bev);
+     free(bev_extra_data);
+
+   is no longer allowed.
+
+   Adding a bufferevent_free_finalize() function is one option here.
+
+   Adding a new option when constructing a bufferevent, plus a new
+   special BEV_EVENT_* flag that gets used for finalization is
+   another option.
+
+   For evbuffers and evconnlisteners, a *_free_finalize() option
+   seems like the best choice.
+
+What about that 'flags' argument to event_finalize()?
+
+   When I first designed this, I thought there might want to be a
+   "TRY_IMMEDIATE" flag to optionally tell the finalizer that, if it
+   _could_ run immediately, it should.
+
+   I'm not yet sure whether that's a good idea.
+
+
