@@ -442,6 +442,9 @@ main(int argc, const char **argv)
 	if (getenv("EVENT_DEBUG_MODE"))
 		event_enable_debug_mode();
 
+	if (getenv("EVENT_DEBUG_LOGS"))
+		event_enable_debug_logging(EVENT_DBG_ALL);
+
 	tinytest_set_aliases(testaliases);
 
 	if (tinytest_main(argc,argv,testgroups))
