@@ -61,6 +61,7 @@
 /* prototypes */
 static int be_filter_enable(struct bufferevent *, short);
 static int be_filter_disable(struct bufferevent *, short);
+static void be_filter_unlink(struct bufferevent *);
 static void be_filter_destruct(struct bufferevent *);
 
 static void be_filter_readcb(struct bufferevent *, void *);
@@ -99,6 +100,7 @@ const struct bufferevent_ops bufferevent_ops_filter = {
 	evutil_offsetof(struct bufferevent_filtered, bev.bev),
 	be_filter_enable,
 	be_filter_disable,
+	be_filter_unlink,
 	be_filter_destruct,
 	bufferevent_generic_adj_timeouts_,
 	be_filter_flush,
@@ -214,7 +216,7 @@ bufferevent_filter_new(struct bufferevent *underlying,
 }
 
 static void
-be_filter_destruct(struct bufferevent *bev)
+be_filter_unlink(struct bufferevent *bev)
 {
 	struct bufferevent_filtered *bevf = upcast(bev);
 	EVUTIL_ASSERT(bevf);
@@ -242,8 +244,15 @@ be_filter_destruct(struct bufferevent *bev)
 			    BEV_SUSPEND_FILT_READ);
 		}
 	}
+}
 
-	bufferevent_del_generic_timeout_cbs_(bev);
+static void
+be_filter_destruct(struct bufferevent *bev)
+{
+	struct bufferevent_filtered *bevf = upcast(bev);
+	EVUTIL_ASSERT(bevf);
+	if (bevf->free_context)
+		bevf->free_context(bevf->context);
 }
 
 static int
