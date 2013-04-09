@@ -389,6 +389,7 @@ int event_add_nolock_(struct event *ev,
 #define EVENT_DEL_NOBLOCK 0
 #define EVENT_DEL_BLOCK 1
 #define EVENT_DEL_AUTOBLOCK 2
+#define EVENT_DEL_EVEN_IF_FINALIZING 3
 int event_del_nolock_(struct event *ev, int blocking);
 int event_remove_timer_nolock_(struct event *ev);
 
@@ -408,7 +409,7 @@ void event_active_later_nolock_(struct event *ev, int res);
 void event_callback_activate_later_nolock_(struct event_base *base,
     struct event_callback *evcb);
 int event_callback_cancel_nolock_(struct event_base *base,
-    struct event_callback *evcb);
+    struct event_callback *evcb, int even_if_finalizing);
 void event_callback_init_(struct event_base *base,
     struct event_callback *cb);
 

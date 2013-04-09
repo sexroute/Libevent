@@ -142,6 +142,8 @@ static void	event_queue_remove_inserted(struct event_base *, struct event *);
 static void event_queue_make_later_events_active(struct event_base *base);
 
 static int evthread_make_base_notifiable_nolock_(struct event_base *base);
+static int event_del_(struct event *ev, int blocking);
+static int event_base_free(struct event_base *, int run_finalizers);
 
 
 #ifdef USE_REINSERT_TIMEOUT
@@ -776,11 +778,11 @@ event_base_free(struct event_base *base)
 			if (evcb->evcb_flags & EVLIST_INIT) {
 				ev = event_callback_to_event(evcb);
 				if (!(ev->ev_flags & EVLIST_INTERNAL)) {
-					event_del(ev);
+					event_del_(ev, EVENT_DEL_EVEN_IF_FINALIZING);
 					++n_deleted;
 				}
 			} else {
-				event_callback_cancel_(base, evcb);
+				event_callback_cancel_nolock_(base, evcb, 1);
 				++n_deleted;
 			}
 			evcb = next;
@@ -794,7 +796,7 @@ event_base_free(struct event_base *base)
 				event_del(ev);
 				++n_deleted;
 			} else {
-				event_callback_cancel_(base, evcb);
+				event_callback_cancel_nolock_(base, evcb, 1);
 				++n_deleted;
 			}
 		}
@@ -2056,9 +2058,8 @@ event_callback_finalize_nolock_(struct event_base *base, unsigned flags, struct 
 	if (evcb->evcb_flags & EVLIST_INIT) {
 		ev = event_callback_to_event(evcb);
 		event_del_nolock_(ev, EVENT_DEL_NOBLOCK);
-		ev->ev_flags |= EVLIST_FINALIZING;
 	} else {
-		event_callback_cancel_nolock_(base, evcb); /*XXX can this fail?*/
+		event_callback_cancel_nolock_(base, evcb, 0); /*XXX can this fail?*/
 	}
 
 	evcb->evcb_closure = EV_CLOSURE_CB_FINALIZE;
@@ -2083,7 +2084,12 @@ event_callback_finalize_many_(struct event_base *base, int n_cbs, struct event_c
 {
 	int n_pending = 0, i;
 
+	if (base == NULL)
+		base = current_base;
+
 	EVBASE_ACQUIRE_LOCK(base, th_base_lock);
+
+	event_debug(("%s: %d events finalizing", __func__, n_cbs));
 
 	/* At most one can be currently executing; the rest we just
 	 * cancel... But we always make sure that the finalize callback
@@ -2094,14 +2100,13 @@ event_callback_finalize_many_(struct event_base *base, int n_cbs, struct event_c
 			event_callback_finalize_nolock_(base, 0, evcb, cb);
 			++n_pending;
 		} else {
-			event_callback_cancel_nolock_(base, evcb);
+			event_callback_cancel_nolock_(base, evcb, 0);
 		}
 	}
 
 	if (n_pending == 0) {
 		/* Just do the first one. */
 		event_callback_finalize_nolock_(base, 0, evcbs[0], cb);
-
 	}
 
 	EVBASE_RELEASE_LOCK(base, th_base_lock);
@@ -2579,9 +2584,11 @@ event_del_nolock_(struct event *ev, int blocking)
 
 	EVENT_BASE_ASSERT_LOCKED(ev->ev_base);
 
-	if (ev->ev_flags & EVLIST_FINALIZING) {
-		/* XXXX Debug */
-		return 0;
+	if (blocking != EVENT_DEL_EVEN_IF_FINALIZING) {
+		if (ev->ev_flags & EVLIST_FINALIZING) {
+			/* XXXX Debug */
+			return 0;
+		}
 	}
 
 	/* If the main thread is currently executing this event's callback,
@@ -2809,21 +2816,21 @@ event_callback_cancel_(struct event_base *base,
 {
 	int r;
 	EVBASE_ACQUIRE_LOCK(base, th_base_lock);
-	r = event_callback_cancel_nolock_(base, evcb);
+	r = event_callback_cancel_nolock_(base, evcb, 0);
 	EVBASE_RELEASE_LOCK(base, th_base_lock);
 	return r;
 }
 
 int
 event_callback_cancel_nolock_(struct event_base *base,
-    struct event_callback *evcb)
+    struct event_callback *evcb, int even_if_finalizing)
 {
+	if ((evcb->evcb_flags & EVLIST_FINALIZING) && !even_if_finalizing)
+		return 0;
+
 	if (evcb->evcb_flags & EVLIST_INIT)
 		return event_del_nolock_(event_callback_to_event(evcb),
-		    EVENT_DEL_AUTOBLOCK);
-
-	if (evcb->evcb_flags & EVLIST_FINALIZING)
-		return 0;
+		    even_if_finalizing ? EVENT_DEL_EVEN_IF_FINALIZING : EVENT_DEL_AUTOBLOCK);
 
 	switch ((evcb->evcb_flags & (EVLIST_ACTIVE|EVLIST_ACTIVE_LATER))) {
 	default:
