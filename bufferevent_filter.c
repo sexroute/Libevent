@@ -220,8 +220,6 @@ be_filter_unlink(struct bufferevent *bev)
 {
 	struct bufferevent_filtered *bevf = upcast(bev);
 	EVUTIL_ASSERT(bevf);
-	if (bevf->free_context)
-		bevf->free_context(bevf->context);
 
 	if (bevf->bev.options & BEV_OPT_CLOSE_ON_FREE) {
 		/* Yes, there is also a decref in bufferevent_decref_.
