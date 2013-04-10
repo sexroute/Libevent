@@ -143,8 +143,6 @@ static void event_queue_make_later_events_active(struct event_base *base);
 
 static int evthread_make_base_notifiable_nolock_(struct event_base *base);
 static int event_del_(struct event *ev, int blocking);
-static int event_base_free(struct event_base *, int run_finalizers);
-
 
 #ifdef USE_REINSERT_TIMEOUT
 /* This code seems buggy; only turn it on if we find out what the trouble is. */
