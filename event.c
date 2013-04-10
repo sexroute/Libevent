@@ -756,9 +756,6 @@ event_base_free_(struct event_base *base, int run_finalizers)
 	 * made it with event_init and forgot to hold a reference to it. */
 	if (base == NULL && current_base)
 		base = current_base;
-	/* If we're freeing current_base, there won't be a current_base. */
-	if (base == current_base)
-		current_base = NULL;
 	/* Don't actually free NULL. */
 	if (base == NULL) {
 		event_warnx("%s: no base to free", __func__);
@@ -851,6 +848,9 @@ event_base_free_(struct event_base *base, int run_finalizers)
 	EVTHREAD_FREE_LOCK(base->th_base_lock, 0);
 	EVTHREAD_FREE_COND(base->current_event_cond);
 
+	/* If we're freeing current_base, there won't be a current_base. */
+	if (base == current_base)
+		current_base = NULL;
 	mm_free(base);
 }
 
