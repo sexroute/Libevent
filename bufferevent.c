@@ -729,7 +729,6 @@ bufferevent_finalize_cb_(struct event_callback *evcb, void *arg_)
 	 */
 	if (underlying)
 		bufferevent_decref_(underlying);
-	puts("DONE");
 }
 
 int
