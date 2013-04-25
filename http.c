@@ -685,6 +685,7 @@ evhttp_connection_fail_(struct evhttp_connection *evcon,
 	void (*cb)(struct evhttp_request *, void *);
 	void *cb_arg;
 	void (*error_cb)(enum evhttp_request_error, void *);
+	void *error_cb_arg;
 	EVUTIL_ASSERT(req != NULL);
 
 	bufferevent_disable(evcon->bufev, EV_READ|EV_WRITE);
@@ -704,13 +705,15 @@ evhttp_connection_fail_(struct evhttp_connection *evcon,
 	}
 
 	error_cb = req->error_cb;
-	cb_arg = req->cb_arg;
+	error_cb_arg = req->cb_arg;
 	/* when the request was canceled, the callback is not executed */
 	if (error != EVREQ_HTTP_REQUEST_CANCEL) {
 		/* save the callback for later; the cb might free our object */
 		cb = req->cb;
+		cb_arg = req->cb_arg;
 	} else {
 		cb = NULL;
+		cb_arg = NULL;
 	}
 
 	/* do not fail all requests; the next request is going to get
@@ -735,7 +738,7 @@ evhttp_connection_fail_(struct evhttp_connection *evcon,
 
 	/* inform the user */
 	if (error_cb != NULL)
-		error_cb(error, cb_arg);
+		error_cb(error, error_cb_arg);
 	if (cb != NULL)
 		(*cb)(NULL, cb_arg);
 }
