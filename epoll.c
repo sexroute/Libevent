@@ -241,7 +241,7 @@ epoll_op_to_string(int op)
   Note also that this table is a little sparse, since ADD+DEL is
   nonsensical ("xxx" in the list below.)
 
-  Note also also that we are shifting old_events by only 3 bits, since
+  Note also also that we are shifting old_events by only 5 bits, since
   EV_READ is 2 and EV_WRITE is 4.
 
   The table was auto-generated with a python script, according to this
@@ -312,91 +312,1060 @@ epoll_op_to_string(int op)
   EV_CHANGE_DEL==2
   EV_READ      ==2
   EV_WRITE     ==4
-  Bit 0: read change is add
-  Bit 1: read change is del
-  Bit 2: write change is add
-  Bit 3: write change is del
-  Bit 4: old events had EV_READ
-  Bit 5: old events had EV_WRITE
+  EV_EOF       == 0x80
+
+  Bit 0: eof change is add
+  Bit 1: eof change is del
+  Bit 2: read change is add
+  Bit 3: read change is del
+  Bit 4: write change is add
+  Bit 5: write change is del
+  Bit 6: old events had EV_READ
+  Bit 7: old events had EV_WRITE
+  Bit 8: old events had EV_EOF
 */
 
 #define INDEX(c) \
-	(   (((c)->read_change&(EV_CHANGE_ADD|EV_CHANGE_DEL))) |       \
-	    (((c)->write_change&(EV_CHANGE_ADD|EV_CHANGE_DEL)) << 2) | \
-	    (((c)->old_events&(EV_READ|EV_WRITE)) << 3) )
+	(   (((c)->hup_change&(EV_CHANGE_ADD|EV_CHANGE_DEL))) |		\
+	    (((c)->read_change&(EV_CHANGE_ADD|EV_CHANGE_DEL)) << 2) |	\
+	    (((c)->write_change&(EV_CHANGE_ADD|EV_CHANGE_DEL)) << 4) |	\
+	    (((c)->old_events&(EV_READ|EV_WRITE)) << 5) |		\
+	    (((c)->old_events&(EV_EOF)) << 1)				\
+	    )
 
 #if EV_READ != 2 || EV_WRITE != 4 || EV_CHANGE_ADD != 1 || EV_CHANGE_DEL != 2
 #error "Libevent's internals changed!  Regenerate the op_table in epoll.c"
 #endif
 
 static const struct operation {
-	int events;
-	int op;
+	ev_uint8_t events;
+	ev_uint8_t op;
 } op_table[] = {
-	{ 0, 0 },                           /* old= 0, write:  0, read:  0 */
-	{ EPOLLIN, EPOLL_CTL_ADD },         /* old= 0, write:  0, read:add */
-	{ EPOLLIN, EPOLL_CTL_DEL },         /* old= 0, write:  0, read:del */
-	{ 0, -1 },                          /* old= 0, write:  0, read:xxx */
-	{ EPOLLOUT, EPOLL_CTL_ADD },        /* old= 0, write:add, read:  0 */
-	{ EPOLLIN|EPOLLOUT, EPOLL_CTL_ADD },/* old= 0, write:add, read:add */
-	{ EPOLLOUT, EPOLL_CTL_ADD },        /* old= 0, write:add, read:del */
-	{ 0, -1 },                          /* old= 0, write:add, read:xxx */
-	{ EPOLLOUT, EPOLL_CTL_DEL },        /* old= 0, write:del, read:  0 */
-	{ EPOLLIN, EPOLL_CTL_ADD },         /* old= 0, write:del, read:add */
-	{ EPOLLIN|EPOLLOUT, EPOLL_CTL_DEL },/* old= 0, write:del, read:del */
-	{ 0, -1 },                          /* old= 0, write:del, read:xxx */
-	{ 0, -1 },                          /* old= 0, write:xxx, read:  0 */
-	{ 0, -1 },                          /* old= 0, write:xxx, read:add */
-	{ 0, -1 },                          /* old= 0, write:xxx, read:del */
-	{ 0, -1 },                          /* old= 0, write:xxx, read:xxx */
-	{ 0, 0 },                           /* old= r, write:  0, read:  0 */
-	{ EPOLLIN, EPOLL_CTL_MOD },         /* old= r, write:  0, read:add */
-	{ EPOLLIN, EPOLL_CTL_DEL },         /* old= r, write:  0, read:del */
-	{ 0, -1 },                          /* old= r, write:  0, read:xxx */
-	{ EPOLLIN|EPOLLOUT, EPOLL_CTL_MOD },/* old= r, write:add, read:  0 */
-	{ EPOLLIN|EPOLLOUT, EPOLL_CTL_MOD },/* old= r, write:add, read:add */
-	{ EPOLLOUT, EPOLL_CTL_MOD },        /* old= r, write:add, read:del */
-	{ 0, -1 },                          /* old= r, write:add, read:xxx */
-	{ EPOLLIN, EPOLL_CTL_MOD },         /* old= r, write:del, read:  0 */
-	{ EPOLLIN, EPOLL_CTL_MOD },         /* old= r, write:del, read:add */
-	{ EPOLLIN|EPOLLOUT, EPOLL_CTL_DEL },/* old= r, write:del, read:del */
-	{ 0, -1 },                          /* old= r, write:del, read:xxx */
-	{ 0, -1 },                          /* old= r, write:xxx, read:  0 */
-	{ 0, -1 },                          /* old= r, write:xxx, read:add */
-	{ 0, -1 },                          /* old= r, write:xxx, read:del */
-	{ 0, -1 },                          /* old= r, write:xxx, read:xxx */
-	{ 0, 0 },                           /* old= w, write:  0, read:  0 */
-	{ EPOLLIN|EPOLLOUT, EPOLL_CTL_MOD },/* old= w, write:  0, read:add */
-	{ EPOLLOUT, EPOLL_CTL_MOD },        /* old= w, write:  0, read:del */
-	{ 0, -1 },                          /* old= w, write:  0, read:xxx */
-	{ EPOLLOUT, EPOLL_CTL_MOD },        /* old= w, write:add, read:  0 */
-	{ EPOLLIN|EPOLLOUT, EPOLL_CTL_MOD },/* old= w, write:add, read:add */
-	{ EPOLLOUT, EPOLL_CTL_MOD },        /* old= w, write:add, read:del */
-	{ 0, -1 },                          /* old= w, write:add, read:xxx */
-	{ EPOLLOUT, EPOLL_CTL_DEL },        /* old= w, write:del, read:  0 */
-	{ EPOLLIN, EPOLL_CTL_MOD },         /* old= w, write:del, read:add */
-	{ EPOLLIN|EPOLLOUT, EPOLL_CTL_DEL },/* old= w, write:del, read:del */
-	{ 0, -1 },                          /* old= w, write:del, read:xxx */
-	{ 0, -1 },                          /* old= w, write:xxx, read:  0 */
-	{ 0, -1 },                          /* old= w, write:xxx, read:add */
-	{ 0, -1 },                          /* old= w, write:xxx, read:del */
-	{ 0, -1 },                          /* old= w, write:xxx, read:xxx */
-	{ 0, 0 },                           /* old=rw, write:  0, read:  0 */
-	{ EPOLLIN|EPOLLOUT, EPOLL_CTL_MOD },/* old=rw, write:  0, read:add */
-	{ EPOLLOUT, EPOLL_CTL_MOD },        /* old=rw, write:  0, read:del */
-	{ 0, -1 },                          /* old=rw, write:  0, read:xxx */
-	{ EPOLLIN|EPOLLOUT, EPOLL_CTL_MOD },/* old=rw, write:add, read:  0 */
-	{ EPOLLIN|EPOLLOUT, EPOLL_CTL_MOD },/* old=rw, write:add, read:add */
-	{ EPOLLOUT, EPOLL_CTL_MOD },        /* old=rw, write:add, read:del */
-	{ 0, -1 },                          /* old=rw, write:add, read:xxx */
-	{ EPOLLIN, EPOLL_CTL_MOD },         /* old=rw, write:del, read:  0 */
-	{ EPOLLIN, EPOLL_CTL_MOD },         /* old=rw, write:del, read:add */
-	{ EPOLLIN|EPOLLOUT, EPOLL_CTL_DEL },/* old=rw, write:del, read:del */
-	{ 0, -1 },                          /* old=rw, write:del, read:xxx */
-	{ 0, -1 },                          /* old=rw, write:xxx, read:  0 */
-	{ 0, -1 },                          /* old=rw, write:xxx, read:add */
-	{ 0, -1 },                          /* old=rw, write:xxx, read:del */
-	{ 0, -1 },                          /* old=rw, write:xxx, read:xxx */
+	/* old=  0, write:  0, read:  0, hup:  0 */
+	{ 0, 0 },
+	/* old=  0, write:  0, read:  0, hup:add */
+	{ EPOLLHUP, EPOLL_CTL_ADD },
+	/* old=  0, write:  0, read:  0, hup:del */
+	{ EPOLLHUP, EPOLL_CTL_DEL },
+	/* old=  0, write:  0, read:  0, hup:xxx */
+	{ 0, 255 },
+	/* old=  0, write:  0, read:add, hup:  0 */
+	{ EPOLLIN, EPOLL_CTL_ADD },
+	/* old=  0, write:  0, read:add, hup:add */
+	{ EPOLLIN|EPOLLHUP, EPOLL_CTL_ADD },
+	/* old=  0, write:  0, read:add, hup:del */
+	{ EPOLLIN, EPOLL_CTL_ADD },
+	/* old=  0, write:  0, read:add, hup:xxx */
+	{ 0, 255 },
+	/* old=  0, write:  0, read:del, hup:  0 */
+	{ EPOLLIN, EPOLL_CTL_DEL },
+	/* old=  0, write:  0, read:del, hup:add */
+	{ EPOLLHUP, EPOLL_CTL_ADD },
+	/* old=  0, write:  0, read:del, hup:del */
+	{ EPOLLIN|EPOLLHUP, EPOLL_CTL_DEL },
+	/* old=  0, write:  0, read:del, hup:xxx */
+	{ 0, 255 },
+	/* old=  0, write:  0, read:xxx, hup:  0 */
+	{ 0, 255 },
+	/* old=  0, write:  0, read:xxx, hup:add */
+	{ 0, 255 },
+	/* old=  0, write:  0, read:xxx, hup:del */
+	{ 0, 255 },
+	/* old=  0, write:  0, read:xxx, hup:xxx */
+	{ 0, 255 },
+	/* old=  0, write:add, read:  0, hup:  0 */
+	{ EPOLLOUT, EPOLL_CTL_ADD },
+	/* old=  0, write:add, read:  0, hup:add */
+	{ EPOLLOUT|EPOLLHUP, EPOLL_CTL_ADD },
+	/* old=  0, write:add, read:  0, hup:del */
+	{ EPOLLOUT, EPOLL_CTL_ADD },
+	/* old=  0, write:add, read:  0, hup:xxx */
+	{ 0, 255 },
+	/* old=  0, write:add, read:add, hup:  0 */
+	{ EPOLLIN|EPOLLOUT, EPOLL_CTL_ADD },
+	/* old=  0, write:add, read:add, hup:add */
+	{ EPOLLIN|EPOLLOUT|EPOLLHUP, EPOLL_CTL_ADD },
+	/* old=  0, write:add, read:add, hup:del */
+	{ EPOLLIN|EPOLLOUT, EPOLL_CTL_ADD },
+	/* old=  0, write:add, read:add, hup:xxx */
+	{ 0, 255 },
+	/* old=  0, write:add, read:del, hup:  0 */
+	{ EPOLLOUT, EPOLL_CTL_ADD },
+	/* old=  0, write:add, read:del, hup:add */
+	{ EPOLLOUT|EPOLLHUP, EPOLL_CTL_ADD },
+	/* old=  0, write:add, read:del, hup:del */
+	{ EPOLLOUT, EPOLL_CTL_ADD },
+	/* old=  0, write:add, read:del, hup:xxx */
+	{ 0, 255 },
+	/* old=  0, write:add, read:xxx, hup:  0 */
+	{ 0, 255 },
+	/* old=  0, write:add, read:xxx, hup:add */
+	{ 0, 255 },
+	/* old=  0, write:add, read:xxx, hup:del */
+	{ 0, 255 },
+	/* old=  0, write:add, read:xxx, hup:xxx */
+	{ 0, 255 },
+	/* old=  0, write:del, read:  0, hup:  0 */
+	{ EPOLLOUT, EPOLL_CTL_DEL },
+	/* old=  0, write:del, read:  0, hup:add */
+	{ EPOLLHUP, EPOLL_CTL_ADD },
+	/* old=  0, write:del, read:  0, hup:del */
+	{ EPOLLOUT|EPOLLHUP, EPOLL_CTL_DEL },
+	/* old=  0, write:del, read:  0, hup:xxx */
+	{ 0, 255 },
+	/* old=  0, write:del, read:add, hup:  0 */
+	{ EPOLLIN, EPOLL_CTL_ADD },
+	/* old=  0, write:del, read:add, hup:add */
+	{ EPOLLIN|EPOLLHUP, EPOLL_CTL_ADD },
+	/* old=  0, write:del, read:add, hup:del */
+	{ EPOLLIN, EPOLL_CTL_ADD },
+	/* old=  0, write:del, read:add, hup:xxx */
+	{ 0, 255 },
+	/* old=  0, write:del, read:del, hup:  0 */
+	{ EPOLLIN|EPOLLOUT, EPOLL_CTL_DEL },
+	/* old=  0, write:del, read:del, hup:add */
+	{ EPOLLHUP, EPOLL_CTL_ADD },
+	/* old=  0, write:del, read:del, hup:del */
+	{ EPOLLIN|EPOLLOUT|EPOLLHUP, EPOLL_CTL_DEL },
+	/* old=  0, write:del, read:del, hup:xxx */
+	{ 0, 255 },
+	/* old=  0, write:del, read:xxx, hup:  0 */
+	{ 0, 255 },
+	/* old=  0, write:del, read:xxx, hup:add */
+	{ 0, 255 },
+	/* old=  0, write:del, read:xxx, hup:del */
+	{ 0, 255 },
+	/* old=  0, write:del, read:xxx, hup:xxx */
+	{ 0, 255 },
+	/* old=  0, write:xxx, read:  0, hup:  0 */
+	{ 0, 255 },
+	/* old=  0, write:xxx, read:  0, hup:add */
+	{ 0, 255 },
+	/* old=  0, write:xxx, read:  0, hup:del */
+	{ 0, 255 },
+	/* old=  0, write:xxx, read:  0, hup:xxx */
+	{ 0, 255 },
+	/* old=  0, write:xxx, read:add, hup:  0 */
+	{ 0, 255 },
+	/* old=  0, write:xxx, read:add, hup:add */
+	{ 0, 255 },
+	/* old=  0, write:xxx, read:add, hup:del */
+	{ 0, 255 },
+	/* old=  0, write:xxx, read:add, hup:xxx */
+	{ 0, 255 },
+	/* old=  0, write:xxx, read:del, hup:  0 */
+	{ 0, 255 },
+	/* old=  0, write:xxx, read:del, hup:add */
+	{ 0, 255 },
+	/* old=  0, write:xxx, read:del, hup:del */
+	{ 0, 255 },
+	/* old=  0, write:xxx, read:del, hup:xxx */
+	{ 0, 255 },
+	/* old=  0, write:xxx, read:xxx, hup:  0 */
+	{ 0, 255 },
+	/* old=  0, write:xxx, read:xxx, hup:add */
+	{ 0, 255 },
+	/* old=  0, write:xxx, read:xxx, hup:del */
+	{ 0, 255 },
+	/* old=  0, write:xxx, read:xxx, hup:xxx */
+	{ 0, 255 },
+	/* old=  r, write:  0, read:  0, hup:  0 */
+	{ 0, 0 },
+	/* old=  r, write:  0, read:  0, hup:add */
+	{ EPOLLIN|EPOLLHUP, EPOLL_CTL_MOD },
+	/* old=  r, write:  0, read:  0, hup:del */
+	{ EPOLLIN, EPOLL_CTL_MOD },
+	/* old=  r, write:  0, read:  0, hup:xxx */
+	{ 0, 255 },
+	/* old=  r, write:  0, read:add, hup:  0 */
+	{ EPOLLIN, EPOLL_CTL_MOD },
+	/* old=  r, write:  0, read:add, hup:add */
+	{ EPOLLIN|EPOLLHUP, EPOLL_CTL_MOD },
+	/* old=  r, write:  0, read:add, hup:del */
+	{ EPOLLIN, EPOLL_CTL_MOD },
+	/* old=  r, write:  0, read:add, hup:xxx */
+	{ 0, 255 },
+	/* old=  r, write:  0, read:del, hup:  0 */
+	{ EPOLLIN, EPOLL_CTL_DEL },
+	/* old=  r, write:  0, read:del, hup:add */
+	{ EPOLLHUP, EPOLL_CTL_MOD },
+	/* old=  r, write:  0, read:del, hup:del */
+	{ EPOLLIN|EPOLLHUP, EPOLL_CTL_DEL },
+	/* old=  r, write:  0, read:del, hup:xxx */
+	{ 0, 255 },
+	/* old=  r, write:  0, read:xxx, hup:  0 */
+	{ 0, 255 },
+	/* old=  r, write:  0, read:xxx, hup:add */
+	{ 0, 255 },
+	/* old=  r, write:  0, read:xxx, hup:del */
+	{ 0, 255 },
+	/* old=  r, write:  0, read:xxx, hup:xxx */
+	{ 0, 255 },
+	/* old=  r, write:add, read:  0, hup:  0 */
+	{ EPOLLIN|EPOLLOUT, EPOLL_CTL_MOD },
+	/* old=  r, write:add, read:  0, hup:add */
+	{ EPOLLIN|EPOLLOUT|EPOLLHUP, EPOLL_CTL_MOD },
+	/* old=  r, write:add, read:  0, hup:del */
+	{ EPOLLIN|EPOLLOUT, EPOLL_CTL_MOD },
+	/* old=  r, write:add, read:  0, hup:xxx */
+	{ 0, 255 },
+	/* old=  r, write:add, read:add, hup:  0 */
+	{ EPOLLIN|EPOLLOUT, EPOLL_CTL_MOD },
+	/* old=  r, write:add, read:add, hup:add */
+	{ EPOLLIN|EPOLLOUT|EPOLLHUP, EPOLL_CTL_MOD },
+	/* old=  r, write:add, read:add, hup:del */
+	{ EPOLLIN|EPOLLOUT, EPOLL_CTL_MOD },
+	/* old=  r, write:add, read:add, hup:xxx */
+	{ 0, 255 },
+	/* old=  r, write:add, read:del, hup:  0 */
+	{ EPOLLOUT, EPOLL_CTL_MOD },
+	/* old=  r, write:add, read:del, hup:add */
+	{ EPOLLOUT|EPOLLHUP, EPOLL_CTL_MOD },
+	/* old=  r, write:add, read:del, hup:del */
+	{ EPOLLOUT, EPOLL_CTL_MOD },
+	/* old=  r, write:add, read:del, hup:xxx */
+	{ 0, 255 },
+	/* old=  r, write:add, read:xxx, hup:  0 */
+	{ 0, 255 },
+	/* old=  r, write:add, read:xxx, hup:add */
+	{ 0, 255 },
+	/* old=  r, write:add, read:xxx, hup:del */
+	{ 0, 255 },
+	/* old=  r, write:add, read:xxx, hup:xxx */
+	{ 0, 255 },
+	/* old=  r, write:del, read:  0, hup:  0 */
+	{ EPOLLIN, EPOLL_CTL_MOD },
+	/* old=  r, write:del, read:  0, hup:add */
+	{ EPOLLIN|EPOLLHUP, EPOLL_CTL_MOD },
+	/* old=  r, write:del, read:  0, hup:del */
+	{ EPOLLIN, EPOLL_CTL_MOD },
+	/* old=  r, write:del, read:  0, hup:xxx */
+	{ 0, 255 },
+	/* old=  r, write:del, read:add, hup:  0 */
+	{ EPOLLIN, EPOLL_CTL_MOD },
+	/* old=  r, write:del, read:add, hup:add */
+	{ EPOLLIN|EPOLLHUP, EPOLL_CTL_MOD },
+	/* old=  r, write:del, read:add, hup:del */
+	{ EPOLLIN, EPOLL_CTL_MOD },
+	/* old=  r, write:del, read:add, hup:xxx */
+	{ 0, 255 },
+	/* old=  r, write:del, read:del, hup:  0 */
+	{ EPOLLIN|EPOLLOUT, EPOLL_CTL_DEL },
+	/* old=  r, write:del, read:del, hup:add */
+	{ EPOLLHUP, EPOLL_CTL_MOD },
+	/* old=  r, write:del, read:del, hup:del */
+	{ EPOLLIN|EPOLLOUT|EPOLLHUP, EPOLL_CTL_DEL },
+	/* old=  r, write:del, read:del, hup:xxx */
+	{ 0, 255 },
+	/* old=  r, write:del, read:xxx, hup:  0 */
+	{ 0, 255 },
+	/* old=  r, write:del, read:xxx, hup:add */
+	{ 0, 255 },
+	/* old=  r, write:del, read:xxx, hup:del */
+	{ 0, 255 },
+	/* old=  r, write:del, read:xxx, hup:xxx */
+	{ 0, 255 },
+	/* old=  r, write:xxx, read:  0, hup:  0 */
+	{ 0, 255 },
+	/* old=  r, write:xxx, read:  0, hup:add */
+	{ 0, 255 },
+	/* old=  r, write:xxx, read:  0, hup:del */
+	{ 0, 255 },
+	/* old=  r, write:xxx, read:  0, hup:xxx */
+	{ 0, 255 },
+	/* old=  r, write:xxx, read:add, hup:  0 */
+	{ 0, 255 },
+	/* old=  r, write:xxx, read:add, hup:add */
+	{ 0, 255 },
+	/* old=  r, write:xxx, read:add, hup:del */
+	{ 0, 255 },
+	/* old=  r, write:xxx, read:add, hup:xxx */
+	{ 0, 255 },
+	/* old=  r, write:xxx, read:del, hup:  0 */
+	{ 0, 255 },
+	/* old=  r, write:xxx, read:del, hup:add */
+	{ 0, 255 },
+	/* old=  r, write:xxx, read:del, hup:del */
+	{ 0, 255 },
+	/* old=  r, write:xxx, read:del, hup:xxx */
+	{ 0, 255 },
+	/* old=  r, write:xxx, read:xxx, hup:  0 */
+	{ 0, 255 },
+	/* old=  r, write:xxx, read:xxx, hup:add */
+	{ 0, 255 },
+	/* old=  r, write:xxx, read:xxx, hup:del */
+	{ 0, 255 },
+	/* old=  r, write:xxx, read:xxx, hup:xxx */
+	{ 0, 255 },
+	/* old=  w, write:  0, read:  0, hup:  0 */
+	{ 0, 0 },
+	/* old=  w, write:  0, read:  0, hup:add */
+	{ EPOLLOUT|EPOLLHUP, EPOLL_CTL_MOD },
+	/* old=  w, write:  0, read:  0, hup:del */
+	{ EPOLLOUT, EPOLL_CTL_MOD },
+	/* old=  w, write:  0, read:  0, hup:xxx */
+	{ 0, 255 },
+	/* old=  w, write:  0, read:add, hup:  0 */
+	{ EPOLLIN|EPOLLOUT, EPOLL_CTL_MOD },
+	/* old=  w, write:  0, read:add, hup:add */
+	{ EPOLLIN|EPOLLOUT|EPOLLHUP, EPOLL_CTL_MOD },
+	/* old=  w, write:  0, read:add, hup:del */
+	{ EPOLLIN|EPOLLOUT, EPOLL_CTL_MOD },
+	/* old=  w, write:  0, read:add, hup:xxx */
+	{ 0, 255 },
+	/* old=  w, write:  0, read:del, hup:  0 */
+	{ EPOLLOUT, EPOLL_CTL_MOD },
+	/* old=  w, write:  0, read:del, hup:add */
+	{ EPOLLOUT|EPOLLHUP, EPOLL_CTL_MOD },
+	/* old=  w, write:  0, read:del, hup:del */
+	{ EPOLLOUT, EPOLL_CTL_MOD },
+	/* old=  w, write:  0, read:del, hup:xxx */
+	{ 0, 255 },
+	/* old=  w, write:  0, read:xxx, hup:  0 */
+	{ 0, 255 },
+	/* old=  w, write:  0, read:xxx, hup:add */
+	{ 0, 255 },
+	/* old=  w, write:  0, read:xxx, hup:del */
+	{ 0, 255 },
+	/* old=  w, write:  0, read:xxx, hup:xxx */
+	{ 0, 255 },
+	/* old=  w, write:add, read:  0, hup:  0 */
+	{ EPOLLOUT, EPOLL_CTL_MOD },
+	/* old=  w, write:add, read:  0, hup:add */
+	{ EPOLLOUT|EPOLLHUP, EPOLL_CTL_MOD },
+	/* old=  w, write:add, read:  0, hup:del */
+	{ EPOLLOUT, EPOLL_CTL_MOD },
+	/* old=  w, write:add, read:  0, hup:xxx */
+	{ 0, 255 },
+	/* old=  w, write:add, read:add, hup:  0 */
+	{ EPOLLIN|EPOLLOUT, EPOLL_CTL_MOD },
+	/* old=  w, write:add, read:add, hup:add */
+	{ EPOLLIN|EPOLLOUT|EPOLLHUP, EPOLL_CTL_MOD },
+	/* old=  w, write:add, read:add, hup:del */
+	{ EPOLLIN|EPOLLOUT, EPOLL_CTL_MOD },
+	/* old=  w, write:add, read:add, hup:xxx */
+	{ 0, 255 },
+	/* old=  w, write:add, read:del, hup:  0 */
+	{ EPOLLOUT, EPOLL_CTL_MOD },
+	/* old=  w, write:add, read:del, hup:add */
+	{ EPOLLOUT|EPOLLHUP, EPOLL_CTL_MOD },
+	/* old=  w, write:add, read:del, hup:del */
+	{ EPOLLOUT, EPOLL_CTL_MOD },
+	/* old=  w, write:add, read:del, hup:xxx */
+	{ 0, 255 },
+	/* old=  w, write:add, read:xxx, hup:  0 */
+	{ 0, 255 },
+	/* old=  w, write:add, read:xxx, hup:add */
+	{ 0, 255 },
+	/* old=  w, write:add, read:xxx, hup:del */
+	{ 0, 255 },
+	/* old=  w, write:add, read:xxx, hup:xxx */
+	{ 0, 255 },
+	/* old=  w, write:del, read:  0, hup:  0 */
+	{ EPOLLOUT, EPOLL_CTL_DEL },
+	/* old=  w, write:del, read:  0, hup:add */
+	{ EPOLLHUP, EPOLL_CTL_MOD },
+	/* old=  w, write:del, read:  0, hup:del */
+	{ EPOLLOUT|EPOLLHUP, EPOLL_CTL_DEL },
+	/* old=  w, write:del, read:  0, hup:xxx */
+	{ 0, 255 },
+	/* old=  w, write:del, read:add, hup:  0 */
+	{ EPOLLIN, EPOLL_CTL_MOD },
+	/* old=  w, write:del, read:add, hup:add */
+	{ EPOLLIN|EPOLLHUP, EPOLL_CTL_MOD },
+	/* old=  w, write:del, read:add, hup:del */
+	{ EPOLLIN, EPOLL_CTL_MOD },
+	/* old=  w, write:del, read:add, hup:xxx */
+	{ 0, 255 },
+	/* old=  w, write:del, read:del, hup:  0 */
+	{ EPOLLIN|EPOLLOUT, EPOLL_CTL_DEL },
+	/* old=  w, write:del, read:del, hup:add */
+	{ EPOLLHUP, EPOLL_CTL_MOD },
+	/* old=  w, write:del, read:del, hup:del */
+	{ EPOLLIN|EPOLLOUT|EPOLLHUP, EPOLL_CTL_DEL },
+	/* old=  w, write:del, read:del, hup:xxx */
+	{ 0, 255 },
+	/* old=  w, write:del, read:xxx, hup:  0 */
+	{ 0, 255 },
+	/* old=  w, write:del, read:xxx, hup:add */
+	{ 0, 255 },
+	/* old=  w, write:del, read:xxx, hup:del */
+	{ 0, 255 },
+	/* old=  w, write:del, read:xxx, hup:xxx */
+	{ 0, 255 },
+	/* old=  w, write:xxx, read:  0, hup:  0 */
+	{ 0, 255 },
+	/* old=  w, write:xxx, read:  0, hup:add */
+	{ 0, 255 },
+	/* old=  w, write:xxx, read:  0, hup:del */
+	{ 0, 255 },
+	/* old=  w, write:xxx, read:  0, hup:xxx */
+	{ 0, 255 },
+	/* old=  w, write:xxx, read:add, hup:  0 */
+	{ 0, 255 },
+	/* old=  w, write:xxx, read:add, hup:add */
+	{ 0, 255 },
+	/* old=  w, write:xxx, read:add, hup:del */
+	{ 0, 255 },
+	/* old=  w, write:xxx, read:add, hup:xxx */
+	{ 0, 255 },
+	/* old=  w, write:xxx, read:del, hup:  0 */
+	{ 0, 255 },
+	/* old=  w, write:xxx, read:del, hup:add */
+	{ 0, 255 },
+	/* old=  w, write:xxx, read:del, hup:del */
+	{ 0, 255 },
+	/* old=  w, write:xxx, read:del, hup:xxx */
+	{ 0, 255 },
+	/* old=  w, write:xxx, read:xxx, hup:  0 */
+	{ 0, 255 },
+	/* old=  w, write:xxx, read:xxx, hup:add */
+	{ 0, 255 },
+	/* old=  w, write:xxx, read:xxx, hup:del */
+	{ 0, 255 },
+	/* old=  w, write:xxx, read:xxx, hup:xxx */
+	{ 0, 255 },
+	/* old= rw, write:  0, read:  0, hup:  0 */
+	{ 0, 0 },
+	/* old= rw, write:  0, read:  0, hup:add */
+	{ EPOLLIN|EPOLLOUT|EPOLLHUP, EPOLL_CTL_MOD },
+	/* old= rw, write:  0, read:  0, hup:del */
+	{ EPOLLIN|EPOLLOUT, EPOLL_CTL_MOD },
+	/* old= rw, write:  0, read:  0, hup:xxx */
+	{ 0, 255 },
+	/* old= rw, write:  0, read:add, hup:  0 */
+	{ EPOLLIN|EPOLLOUT, EPOLL_CTL_MOD },
+	/* old= rw, write:  0, read:add, hup:add */
+	{ EPOLLIN|EPOLLOUT|EPOLLHUP, EPOLL_CTL_MOD },
+	/* old= rw, write:  0, read:add, hup:del */
+	{ EPOLLIN|EPOLLOUT, EPOLL_CTL_MOD },
+	/* old= rw, write:  0, read:add, hup:xxx */
+	{ 0, 255 },
+	/* old= rw, write:  0, read:del, hup:  0 */
+	{ EPOLLOUT, EPOLL_CTL_MOD },
+	/* old= rw, write:  0, read:del, hup:add */
+	{ EPOLLOUT|EPOLLHUP, EPOLL_CTL_MOD },
+	/* old= rw, write:  0, read:del, hup:del */
+	{ EPOLLOUT, EPOLL_CTL_MOD },
+	/* old= rw, write:  0, read:del, hup:xxx */
+	{ 0, 255 },
+	/* old= rw, write:  0, read:xxx, hup:  0 */
+	{ 0, 255 },
+	/* old= rw, write:  0, read:xxx, hup:add */
+	{ 0, 255 },
+	/* old= rw, write:  0, read:xxx, hup:del */
+	{ 0, 255 },
+	/* old= rw, write:  0, read:xxx, hup:xxx */
+	{ 0, 255 },
+	/* old= rw, write:add, read:  0, hup:  0 */
+	{ EPOLLIN|EPOLLOUT, EPOLL_CTL_MOD },
+	/* old= rw, write:add, read:  0, hup:add */
+	{ EPOLLIN|EPOLLOUT|EPOLLHUP, EPOLL_CTL_MOD },
+	/* old= rw, write:add, read:  0, hup:del */
+	{ EPOLLIN|EPOLLOUT, EPOLL_CTL_MOD },
+	/* old= rw, write:add, read:  0, hup:xxx */
+	{ 0, 255 },
+	/* old= rw, write:add, read:add, hup:  0 */
+	{ EPOLLIN|EPOLLOUT, EPOLL_CTL_MOD },
+	/* old= rw, write:add, read:add, hup:add */
+	{ EPOLLIN|EPOLLOUT|EPOLLHUP, EPOLL_CTL_MOD },
+	/* old= rw, write:add, read:add, hup:del */
+	{ EPOLLIN|EPOLLOUT, EPOLL_CTL_MOD },
+	/* old= rw, write:add, read:add, hup:xxx */
+	{ 0, 255 },
+	/* old= rw, write:add, read:del, hup:  0 */
+	{ EPOLLOUT, EPOLL_CTL_MOD },
+	/* old= rw, write:add, read:del, hup:add */
+	{ EPOLLOUT|EPOLLHUP, EPOLL_CTL_MOD },
+	/* old= rw, write:add, read:del, hup:del */
+	{ EPOLLOUT, EPOLL_CTL_MOD },
+	/* old= rw, write:add, read:del, hup:xxx */
+	{ 0, 255 },
+	/* old= rw, write:add, read:xxx, hup:  0 */
+	{ 0, 255 },
+	/* old= rw, write:add, read:xxx, hup:add */
+	{ 0, 255 },
+	/* old= rw, write:add, read:xxx, hup:del */
+	{ 0, 255 },
+	/* old= rw, write:add, read:xxx, hup:xxx */
+	{ 0, 255 },
+	/* old= rw, write:del, read:  0, hup:  0 */
+	{ EPOLLIN, EPOLL_CTL_MOD },
+	/* old= rw, write:del, read:  0, hup:add */
+	{ EPOLLIN|EPOLLHUP, EPOLL_CTL_MOD },
+	/* old= rw, write:del, read:  0, hup:del */
+	{ EPOLLIN, EPOLL_CTL_MOD },
+	/* old= rw, write:del, read:  0, hup:xxx */
+	{ 0, 255 },
+	/* old= rw, write:del, read:add, hup:  0 */
+	{ EPOLLIN, EPOLL_CTL_MOD },
+	/* old= rw, write:del, read:add, hup:add */
+	{ EPOLLIN|EPOLLHUP, EPOLL_CTL_MOD },
+	/* old= rw, write:del, read:add, hup:del */
+	{ EPOLLIN, EPOLL_CTL_MOD },
+	/* old= rw, write:del, read:add, hup:xxx */
+	{ 0, 255 },
+	/* old= rw, write:del, read:del, hup:  0 */
+	{ EPOLLIN|EPOLLOUT, EPOLL_CTL_DEL },
+	/* old= rw, write:del, read:del, hup:add */
+	{ EPOLLHUP, EPOLL_CTL_MOD },
+	/* old= rw, write:del, read:del, hup:del */
+	{ EPOLLIN|EPOLLOUT|EPOLLHUP, EPOLL_CTL_DEL },
+	/* old= rw, write:del, read:del, hup:xxx */
+	{ 0, 255 },
+	/* old= rw, write:del, read:xxx, hup:  0 */
+	{ 0, 255 },
+	/* old= rw, write:del, read:xxx, hup:add */
+	{ 0, 255 },
+	/* old= rw, write:del, read:xxx, hup:del */
+	{ 0, 255 },
+	/* old= rw, write:del, read:xxx, hup:xxx */
+	{ 0, 255 },
+	/* old= rw, write:xxx, read:  0, hup:  0 */
+	{ 0, 255 },
+	/* old= rw, write:xxx, read:  0, hup:add */
+	{ 0, 255 },
+	/* old= rw, write:xxx, read:  0, hup:del */
+	{ 0, 255 },
+	/* old= rw, write:xxx, read:  0, hup:xxx */
+	{ 0, 255 },
+	/* old= rw, write:xxx, read:add, hup:  0 */
+	{ 0, 255 },
+	/* old= rw, write:xxx, read:add, hup:add */
+	{ 0, 255 },
+	/* old= rw, write:xxx, read:add, hup:del */
+	{ 0, 255 },
+	/* old= rw, write:xxx, read:add, hup:xxx */
+	{ 0, 255 },
+	/* old= rw, write:xxx, read:del, hup:  0 */
+	{ 0, 255 },
+	/* old= rw, write:xxx, read:del, hup:add */
+	{ 0, 255 },
+	/* old= rw, write:xxx, read:del, hup:del */
+	{ 0, 255 },
+	/* old= rw, write:xxx, read:del, hup:xxx */
+	{ 0, 255 },
+	/* old= rw, write:xxx, read:xxx, hup:  0 */
+	{ 0, 255 },
+	/* old= rw, write:xxx, read:xxx, hup:add */
+	{ 0, 255 },
+	/* old= rw, write:xxx, read:xxx, hup:del */
+	{ 0, 255 },
+	/* old= rw, write:xxx, read:xxx, hup:xxx */
+	{ 0, 255 },
+	/* old=  h, write:  0, read:  0, hup:  0 */
+	{ 0, 0 },
+	/* old=  h, write:  0, read:  0, hup:add */
+	{ EPOLLHUP, EPOLL_CTL_MOD },
+	/* old=  h, write:  0, read:  0, hup:del */
+	{ EPOLHUP, EPOLL_CTL_MOD },
+	/* old=  h, write:  0, read:  0, hup:xxx */
+	{ 0, 255 },
+	/* old=  h, write:  0, read:add, hup:  0 */
+	{ EPOLLIN|EPOLLHUP, EPOLL_CTL_MOD },
+	/* old=  h, write:  0, read:add, hup:add */
+	{ EPOLLIN|EPOLLHUP, EPOLL_CTL_MOD },
+	/* old=  h, write:  0, read:add, hup:del */
+	{ EPOLLIN, EPOLL_CTL_MOD },
+	/* old=  h, write:  0, read:add, hup:xxx */
+	{ 0, 255 },
+	/* old=  h, write:  0, read:del, hup:  0 */
+	{ EPOLHUP, EPOLL_CTL_MOD },
+	/* old=  h, write:  0, read:del, hup:add */
+	{ EPOLLHUP, EPOLL_CTL_MOD },
+	/* old=  h, write:  0, read:del, hup:del */
+	{ EPOLHUP, EPOLL_CTL_MOD },
+	/* old=  h, write:  0, read:del, hup:xxx */
+	{ 0, 255 },
+	/* old=  h, write:  0, read:xxx, hup:  0 */
+	{ 0, 255 },
+	/* old=  h, write:  0, read:xxx, hup:add */
+	{ 0, 255 },
+	/* old=  h, write:  0, read:xxx, hup:del */
+	{ 0, 255 },
+	/* old=  h, write:  0, read:xxx, hup:xxx */
+	{ 0, 255 },
+	/* old=  h, write:add, read:  0, hup:  0 */
+	{ EPOLLOUT|EPOLLHUP, EPOLL_CTL_MOD },
+	/* old=  h, write:add, read:  0, hup:add */
+	{ EPOLLOUT|EPOLLHUP, EPOLL_CTL_MOD },
+	/* old=  h, write:add, read:  0, hup:del */
+	{ EPOLLOUT, EPOLL_CTL_MOD },
+	/* old=  h, write:add, read:  0, hup:xxx */
+	{ 0, 255 },
+	/* old=  h, write:add, read:add, hup:  0 */
+	{ EPOLLIN|EPOLLOUT|EPOLLHUP, EPOLL_CTL_MOD },
+	/* old=  h, write:add, read:add, hup:add */
+	{ EPOLLIN|EPOLLOUT|EPOLLHUP, EPOLL_CTL_MOD },
+	/* old=  h, write:add, read:add, hup:del */
+	{ EPOLLIN|EPOLLOUT, EPOLL_CTL_MOD },
+	/* old=  h, write:add, read:add, hup:xxx */
+	{ 0, 255 },
+	/* old=  h, write:add, read:del, hup:  0 */
+	{ EPOLLOUT|EPOLLHUP, EPOLL_CTL_MOD },
+	/* old=  h, write:add, read:del, hup:add */
+	{ EPOLLOUT|EPOLLHUP, EPOLL_CTL_MOD },
+	/* old=  h, write:add, read:del, hup:del */
+	{ EPOLLOUT, EPOLL_CTL_MOD },
+	/* old=  h, write:add, read:del, hup:xxx */
+	{ 0, 255 },
+	/* old=  h, write:add, read:xxx, hup:  0 */
+	{ 0, 255 },
+	/* old=  h, write:add, read:xxx, hup:add */
+	{ 0, 255 },
+	/* old=  h, write:add, read:xxx, hup:del */
+	{ 0, 255 },
+	/* old=  h, write:add, read:xxx, hup:xxx */
+	{ 0, 255 },
+	/* old=  h, write:del, read:  0, hup:  0 */
+	{ EPOLHUP, EPOLL_CTL_MOD },
+	/* old=  h, write:del, read:  0, hup:add */
+	{ EPOLLHUP, EPOLL_CTL_MOD },
+	/* old=  h, write:del, read:  0, hup:del */
+	{ EPOLHUP, EPOLL_CTL_MOD },
+	/* old=  h, write:del, read:  0, hup:xxx */
+	{ 0, 255 },
+	/* old=  h, write:del, read:add, hup:  0 */
+	{ EPOLLIN|EPOLLHUP, EPOLL_CTL_MOD },
+	/* old=  h, write:del, read:add, hup:add */
+	{ EPOLLIN|EPOLLHUP, EPOLL_CTL_MOD },
+	/* old=  h, write:del, read:add, hup:del */
+	{ EPOLLIN, EPOLL_CTL_MOD },
+	/* old=  h, write:del, read:add, hup:xxx */
+	{ 0, 255 },
+	/* old=  h, write:del, read:del, hup:  0 */
+	{ EPOLHUP, EPOLL_CTL_MOD },
+	/* old=  h, write:del, read:del, hup:add */
+	{ EPOLLHUP, EPOLL_CTL_MOD },
+	/* old=  h, write:del, read:del, hup:del */
+	{ EPOLHUP, EPOLL_CTL_MOD },
+	/* old=  h, write:del, read:del, hup:xxx */
+	{ 0, 255 },
+	/* old=  h, write:del, read:xxx, hup:  0 */
+	{ 0, 255 },
+	/* old=  h, write:del, read:xxx, hup:add */
+	{ 0, 255 },
+	/* old=  h, write:del, read:xxx, hup:del */
+	{ 0, 255 },
+	/* old=  h, write:del, read:xxx, hup:xxx */
+	{ 0, 255 },
+	/* old=  h, write:xxx, read:  0, hup:  0 */
+	{ 0, 255 },
+	/* old=  h, write:xxx, read:  0, hup:add */
+	{ 0, 255 },
+	/* old=  h, write:xxx, read:  0, hup:del */
+	{ 0, 255 },
+	/* old=  h, write:xxx, read:  0, hup:xxx */
+	{ 0, 255 },
+	/* old=  h, write:xxx, read:add, hup:  0 */
+	{ 0, 255 },
+	/* old=  h, write:xxx, read:add, hup:add */
+	{ 0, 255 },
+	/* old=  h, write:xxx, read:add, hup:del */
+	{ 0, 255 },
+	/* old=  h, write:xxx, read:add, hup:xxx */
+	{ 0, 255 },
+	/* old=  h, write:xxx, read:del, hup:  0 */
+	{ 0, 255 },
+	/* old=  h, write:xxx, read:del, hup:add */
+	{ 0, 255 },
+	/* old=  h, write:xxx, read:del, hup:del */
+	{ 0, 255 },
+	/* old=  h, write:xxx, read:del, hup:xxx */
+	{ 0, 255 },
+	/* old=  h, write:xxx, read:xxx, hup:  0 */
+	{ 0, 255 },
+	/* old=  h, write:xxx, read:xxx, hup:add */
+	{ 0, 255 },
+	/* old=  h, write:xxx, read:xxx, hup:del */
+	{ 0, 255 },
+	/* old=  h, write:xxx, read:xxx, hup:xxx */
+	{ 0, 255 },
+	/* old= hr, write:  0, read:  0, hup:  0 */
+	{ 0, 0 },
+	/* old= hr, write:  0, read:  0, hup:add */
+	{ EPOLLIN|EPOLLHUP, EPOLL_CTL_MOD },
+	/* old= hr, write:  0, read:  0, hup:del */
+	{ EPOLLIN|EPOLHUP, EPOLL_CTL_MOD },
+	/* old= hr, write:  0, read:  0, hup:xxx */
+	{ 0, 255 },
+	/* old= hr, write:  0, read:add, hup:  0 */
+	{ EPOLLIN|EPOLLHUP, EPOLL_CTL_MOD },
+	/* old= hr, write:  0, read:add, hup:add */
+	{ EPOLLIN|EPOLLHUP, EPOLL_CTL_MOD },
+	/* old= hr, write:  0, read:add, hup:del */
+	{ EPOLLIN, EPOLL_CTL_MOD },
+	/* old= hr, write:  0, read:add, hup:xxx */
+	{ 0, 255 },
+	/* old= hr, write:  0, read:del, hup:  0 */
+	{ EPOLHUP, EPOLL_CTL_MOD },
+	/* old= hr, write:  0, read:del, hup:add */
+	{ EPOLLHUP, EPOLL_CTL_MOD },
+	/* old= hr, write:  0, read:del, hup:del */
+	{ EPOLHUP, EPOLL_CTL_MOD },
+	/* old= hr, write:  0, read:del, hup:xxx */
+	{ 0, 255 },
+	/* old= hr, write:  0, read:xxx, hup:  0 */
+	{ 0, 255 },
+	/* old= hr, write:  0, read:xxx, hup:add */
+	{ 0, 255 },
+	/* old= hr, write:  0, read:xxx, hup:del */
+	{ 0, 255 },
+	/* old= hr, write:  0, read:xxx, hup:xxx */
+	{ 0, 255 },
+	/* old= hr, write:add, read:  0, hup:  0 */
+	{ EPOLLIN|EPOLLOUT|EPOLLHUP, EPOLL_CTL_MOD },
+	/* old= hr, write:add, read:  0, hup:add */
+	{ EPOLLIN|EPOLLOUT|EPOLLHUP, EPOLL_CTL_MOD },
+	/* old= hr, write:add, read:  0, hup:del */
+	{ EPOLLIN|EPOLLOUT, EPOLL_CTL_MOD },
+	/* old= hr, write:add, read:  0, hup:xxx */
+	{ 0, 255 },
+	/* old= hr, write:add, read:add, hup:  0 */
+	{ EPOLLIN|EPOLLOUT|EPOLLHUP, EPOLL_CTL_MOD },
+	/* old= hr, write:add, read:add, hup:add */
+	{ EPOLLIN|EPOLLOUT|EPOLLHUP, EPOLL_CTL_MOD },
+	/* old= hr, write:add, read:add, hup:del */
+	{ EPOLLIN|EPOLLOUT, EPOLL_CTL_MOD },
+	/* old= hr, write:add, read:add, hup:xxx */
+	{ 0, 255 },
+	/* old= hr, write:add, read:del, hup:  0 */
+	{ EPOLLOUT|EPOLLHUP, EPOLL_CTL_MOD },
+	/* old= hr, write:add, read:del, hup:add */
+	{ EPOLLOUT|EPOLLHUP, EPOLL_CTL_MOD },
+	/* old= hr, write:add, read:del, hup:del */
+	{ EPOLLOUT, EPOLL_CTL_MOD },
+	/* old= hr, write:add, read:del, hup:xxx */
+	{ 0, 255 },
+	/* old= hr, write:add, read:xxx, hup:  0 */
+	{ 0, 255 },
+	/* old= hr, write:add, read:xxx, hup:add */
+	{ 0, 255 },
+	/* old= hr, write:add, read:xxx, hup:del */
+	{ 0, 255 },
+	/* old= hr, write:add, read:xxx, hup:xxx */
+	{ 0, 255 },
+	/* old= hr, write:del, read:  0, hup:  0 */
+	{ EPOLLIN|EPOLHUP, EPOLL_CTL_MOD },
+	/* old= hr, write:del, read:  0, hup:add */
+	{ EPOLLIN|EPOLLHUP, EPOLL_CTL_MOD },
+	/* old= hr, write:del, read:  0, hup:del */
+	{ EPOLLIN|EPOLHUP, EPOLL_CTL_MOD },
+	/* old= hr, write:del, read:  0, hup:xxx */
+	{ 0, 255 },
+	/* old= hr, write:del, read:add, hup:  0 */
+	{ EPOLLIN|EPOLLHUP, EPOLL_CTL_MOD },
+	/* old= hr, write:del, read:add, hup:add */
+	{ EPOLLIN|EPOLLHUP, EPOLL_CTL_MOD },
+	/* old= hr, write:del, read:add, hup:del */
+	{ EPOLLIN, EPOLL_CTL_MOD },
+	/* old= hr, write:del, read:add, hup:xxx */
+	{ 0, 255 },
+	/* old= hr, write:del, read:del, hup:  0 */
+	{ EPOLHUP, EPOLL_CTL_MOD },
+	/* old= hr, write:del, read:del, hup:add */
+	{ EPOLLHUP, EPOLL_CTL_MOD },
+	/* old= hr, write:del, read:del, hup:del */
+	{ EPOLHUP, EPOLL_CTL_MOD },
+	/* old= hr, write:del, read:del, hup:xxx */
+	{ 0, 255 },
+	/* old= hr, write:del, read:xxx, hup:  0 */
+	{ 0, 255 },
+	/* old= hr, write:del, read:xxx, hup:add */
+	{ 0, 255 },
+	/* old= hr, write:del, read:xxx, hup:del */
+	{ 0, 255 },
+	/* old= hr, write:del, read:xxx, hup:xxx */
+	{ 0, 255 },
+	/* old= hr, write:xxx, read:  0, hup:  0 */
+	{ 0, 255 },
+	/* old= hr, write:xxx, read:  0, hup:add */
+	{ 0, 255 },
+	/* old= hr, write:xxx, read:  0, hup:del */
+	{ 0, 255 },
+	/* old= hr, write:xxx, read:  0, hup:xxx */
+	{ 0, 255 },
+	/* old= hr, write:xxx, read:add, hup:  0 */
+	{ 0, 255 },
+	/* old= hr, write:xxx, read:add, hup:add */
+	{ 0, 255 },
+	/* old= hr, write:xxx, read:add, hup:del */
+	{ 0, 255 },
+	/* old= hr, write:xxx, read:add, hup:xxx */
+	{ 0, 255 },
+	/* old= hr, write:xxx, read:del, hup:  0 */
+	{ 0, 255 },
+	/* old= hr, write:xxx, read:del, hup:add */
+	{ 0, 255 },
+	/* old= hr, write:xxx, read:del, hup:del */
+	{ 0, 255 },
+	/* old= hr, write:xxx, read:del, hup:xxx */
+	{ 0, 255 },
+	/* old= hr, write:xxx, read:xxx, hup:  0 */
+	{ 0, 255 },
+	/* old= hr, write:xxx, read:xxx, hup:add */
+	{ 0, 255 },
+	/* old= hr, write:xxx, read:xxx, hup:del */
+	{ 0, 255 },
+	/* old= hr, write:xxx, read:xxx, hup:xxx */
+	{ 0, 255 },
+	/* old= hw, write:  0, read:  0, hup:  0 */
+	{ 0, 0 },
+	/* old= hw, write:  0, read:  0, hup:add */
+	{ EPOLLOUT|EPOLLHUP, EPOLL_CTL_MOD },
+	/* old= hw, write:  0, read:  0, hup:del */
+	{ EPOLLOUT|EPOLHUP, EPOLL_CTL_MOD },
+	/* old= hw, write:  0, read:  0, hup:xxx */
+	{ 0, 255 },
+	/* old= hw, write:  0, read:add, hup:  0 */
+	{ EPOLLIN|EPOLLOUT|EPOLLHUP, EPOLL_CTL_MOD },
+	/* old= hw, write:  0, read:add, hup:add */
+	{ EPOLLIN|EPOLLOUT|EPOLLHUP, EPOLL_CTL_MOD },
+	/* old= hw, write:  0, read:add, hup:del */
+	{ EPOLLIN|EPOLLOUT, EPOLL_CTL_MOD },
+	/* old= hw, write:  0, read:add, hup:xxx */
+	{ 0, 255 },
+	/* old= hw, write:  0, read:del, hup:  0 */
+	{ EPOLLOUT|EPOLHUP, EPOLL_CTL_MOD },
+	/* old= hw, write:  0, read:del, hup:add */
+	{ EPOLLOUT|EPOLLHUP, EPOLL_CTL_MOD },
+	/* old= hw, write:  0, read:del, hup:del */
+	{ EPOLLOUT|EPOLHUP, EPOLL_CTL_MOD },
+	/* old= hw, write:  0, read:del, hup:xxx */
+	{ 0, 255 },
+	/* old= hw, write:  0, read:xxx, hup:  0 */
+	{ 0, 255 },
+	/* old= hw, write:  0, read:xxx, hup:add */
+	{ 0, 255 },
+	/* old= hw, write:  0, read:xxx, hup:del */
+	{ 0, 255 },
+	/* old= hw, write:  0, read:xxx, hup:xxx */
+	{ 0, 255 },
+	/* old= hw, write:add, read:  0, hup:  0 */
+	{ EPOLLOUT|EPOLLHUP, EPOLL_CTL_MOD },
+	/* old= hw, write:add, read:  0, hup:add */
+	{ EPOLLOUT|EPOLLHUP, EPOLL_CTL_MOD },
+	/* old= hw, write:add, read:  0, hup:del */
+	{ EPOLLOUT, EPOLL_CTL_MOD },
+	/* old= hw, write:add, read:  0, hup:xxx */
+	{ 0, 255 },
+	/* old= hw, write:add, read:add, hup:  0 */
+	{ EPOLLIN|EPOLLOUT|EPOLLHUP, EPOLL_CTL_MOD },
+	/* old= hw, write:add, read:add, hup:add */
+	{ EPOLLIN|EPOLLOUT|EPOLLHUP, EPOLL_CTL_MOD },
+	/* old= hw, write:add, read:add, hup:del */
+	{ EPOLLIN|EPOLLOUT, EPOLL_CTL_MOD },
+	/* old= hw, write:add, read:add, hup:xxx */
+	{ 0, 255 },
+	/* old= hw, write:add, read:del, hup:  0 */
+	{ EPOLLOUT|EPOLLHUP, EPOLL_CTL_MOD },
+	/* old= hw, write:add, read:del, hup:add */
+	{ EPOLLOUT|EPOLLHUP, EPOLL_CTL_MOD },
+	/* old= hw, write:add, read:del, hup:del */
+	{ EPOLLOUT, EPOLL_CTL_MOD },
+	/* old= hw, write:add, read:del, hup:xxx */
+	{ 0, 255 },
+	/* old= hw, write:add, read:xxx, hup:  0 */
+	{ 0, 255 },
+	/* old= hw, write:add, read:xxx, hup:add */
+	{ 0, 255 },
+	/* old= hw, write:add, read:xxx, hup:del */
+	{ 0, 255 },
+	/* old= hw, write:add, read:xxx, hup:xxx */
+	{ 0, 255 },
+	/* old= hw, write:del, read:  0, hup:  0 */
+	{ EPOLHUP, EPOLL_CTL_MOD },
+	/* old= hw, write:del, read:  0, hup:add */
+	{ EPOLLHUP, EPOLL_CTL_MOD },
+	/* old= hw, write:del, read:  0, hup:del */
+	{ EPOLHUP, EPOLL_CTL_MOD },
+	/* old= hw, write:del, read:  0, hup:xxx */
+	{ 0, 255 },
+	/* old= hw, write:del, read:add, hup:  0 */
+	{ EPOLLIN|EPOLLHUP, EPOLL_CTL_MOD },
+	/* old= hw, write:del, read:add, hup:add */
+	{ EPOLLIN|EPOLLHUP, EPOLL_CTL_MOD },
+	/* old= hw, write:del, read:add, hup:del */
+	{ EPOLLIN, EPOLL_CTL_MOD },
+	/* old= hw, write:del, read:add, hup:xxx */
+	{ 0, 255 },
+	/* old= hw, write:del, read:del, hup:  0 */
+	{ EPOLHUP, EPOLL_CTL_MOD },
+	/* old= hw, write:del, read:del, hup:add */
+	{ EPOLLHUP, EPOLL_CTL_MOD },
+	/* old= hw, write:del, read:del, hup:del */
+	{ EPOLHUP, EPOLL_CTL_MOD },
+	/* old= hw, write:del, read:del, hup:xxx */
+	{ 0, 255 },
+	/* old= hw, write:del, read:xxx, hup:  0 */
+	{ 0, 255 },
+	/* old= hw, write:del, read:xxx, hup:add */
+	{ 0, 255 },
+	/* old= hw, write:del, read:xxx, hup:del */
+	{ 0, 255 },
+	/* old= hw, write:del, read:xxx, hup:xxx */
+	{ 0, 255 },
+	/* old= hw, write:xxx, read:  0, hup:  0 */
+	{ 0, 255 },
+	/* old= hw, write:xxx, read:  0, hup:add */
+	{ 0, 255 },
+	/* old= hw, write:xxx, read:  0, hup:del */
+	{ 0, 255 },
+	/* old= hw, write:xxx, read:  0, hup:xxx */
+	{ 0, 255 },
+	/* old= hw, write:xxx, read:add, hup:  0 */
+	{ 0, 255 },
+	/* old= hw, write:xxx, read:add, hup:add */
+	{ 0, 255 },
+	/* old= hw, write:xxx, read:add, hup:del */
+	{ 0, 255 },
+	/* old= hw, write:xxx, read:add, hup:xxx */
+	{ 0, 255 },
+	/* old= hw, write:xxx, read:del, hup:  0 */
+	{ 0, 255 },
+	/* old= hw, write:xxx, read:del, hup:add */
+	{ 0, 255 },
+	/* old= hw, write:xxx, read:del, hup:del */
+	{ 0, 255 },
+	/* old= hw, write:xxx, read:del, hup:xxx */
+	{ 0, 255 },
+	/* old= hw, write:xxx, read:xxx, hup:  0 */
+	{ 0, 255 },
+	/* old= hw, write:xxx, read:xxx, hup:add */
+	{ 0, 255 },
+	/* old= hw, write:xxx, read:xxx, hup:del */
+	{ 0, 255 },
+	/* old= hw, write:xxx, read:xxx, hup:xxx */
+	{ 0, 255 },
+	/* old=hrw, write:  0, read:  0, hup:  0 */
+	{ 0, 0 },
+	/* old=hrw, write:  0, read:  0, hup:add */
+	{ EPOLLIN|EPOLLOUT|EPOLLHUP, EPOLL_CTL_MOD },
+	/* old=hrw, write:  0, read:  0, hup:del */
+	{ EPOLLIN|EPOLLOUT|EPOLHUP, EPOLL_CTL_MOD },
+	/* old=hrw, write:  0, read:  0, hup:xxx */
+	{ 0, 255 },
+	/* old=hrw, write:  0, read:add, hup:  0 */
+	{ EPOLLIN|EPOLLOUT|EPOLLHUP, EPOLL_CTL_MOD },
+	/* old=hrw, write:  0, read:add, hup:add */
+	{ EPOLLIN|EPOLLOUT|EPOLLHUP, EPOLL_CTL_MOD },
+	/* old=hrw, write:  0, read:add, hup:del */
+	{ EPOLLIN|EPOLLOUT, EPOLL_CTL_MOD },
+	/* old=hrw, write:  0, read:add, hup:xxx */
+	{ 0, 255 },
+	/* old=hrw, write:  0, read:del, hup:  0 */
+	{ EPOLLOUT|EPOLHUP, EPOLL_CTL_MOD },
+	/* old=hrw, write:  0, read:del, hup:add */
+	{ EPOLLOUT|EPOLLHUP, EPOLL_CTL_MOD },
+	/* old=hrw, write:  0, read:del, hup:del */
+	{ EPOLLOUT|EPOLHUP, EPOLL_CTL_MOD },
+	/* old=hrw, write:  0, read:del, hup:xxx */
+	{ 0, 255 },
+	/* old=hrw, write:  0, read:xxx, hup:  0 */
+	{ 0, 255 },
+	/* old=hrw, write:  0, read:xxx, hup:add */
+	{ 0, 255 },
+	/* old=hrw, write:  0, read:xxx, hup:del */
+	{ 0, 255 },
+	/* old=hrw, write:  0, read:xxx, hup:xxx */
+	{ 0, 255 },
+	/* old=hrw, write:add, read:  0, hup:  0 */
+	{ EPOLLIN|EPOLLOUT|EPOLLHUP, EPOLL_CTL_MOD },
+	/* old=hrw, write:add, read:  0, hup:add */
+	{ EPOLLIN|EPOLLOUT|EPOLLHUP, EPOLL_CTL_MOD },
+	/* old=hrw, write:add, read:  0, hup:del */
+	{ EPOLLIN|EPOLLOUT, EPOLL_CTL_MOD },
+	/* old=hrw, write:add, read:  0, hup:xxx */
+	{ 0, 255 },
+	/* old=hrw, write:add, read:add, hup:  0 */
+	{ EPOLLIN|EPOLLOUT|EPOLLHUP, EPOLL_CTL_MOD },
+	/* old=hrw, write:add, read:add, hup:add */
+	{ EPOLLIN|EPOLLOUT|EPOLLHUP, EPOLL_CTL_MOD },
+	/* old=hrw, write:add, read:add, hup:del */
+	{ EPOLLIN|EPOLLOUT, EPOLL_CTL_MOD },
+	/* old=hrw, write:add, read:add, hup:xxx */
+	{ 0, 255 },
+	/* old=hrw, write:add, read:del, hup:  0 */
+	{ EPOLLOUT|EPOLLHUP, EPOLL_CTL_MOD },
+	/* old=hrw, write:add, read:del, hup:add */
+	{ EPOLLOUT|EPOLLHUP, EPOLL_CTL_MOD },
+	/* old=hrw, write:add, read:del, hup:del */
+	{ EPOLLOUT, EPOLL_CTL_MOD },
+	/* old=hrw, write:add, read:del, hup:xxx */
+	{ 0, 255 },
+	/* old=hrw, write:add, read:xxx, hup:  0 */
+	{ 0, 255 },
+	/* old=hrw, write:add, read:xxx, hup:add */
+	{ 0, 255 },
+	/* old=hrw, write:add, read:xxx, hup:del */
+	{ 0, 255 },
+	/* old=hrw, write:add, read:xxx, hup:xxx */
+	{ 0, 255 },
+	/* old=hrw, write:del, read:  0, hup:  0 */
+	{ EPOLLIN|EPOLHUP, EPOLL_CTL_MOD },
+	/* old=hrw, write:del, read:  0, hup:add */
+	{ EPOLLIN|EPOLLHUP, EPOLL_CTL_MOD },
+	/* old=hrw, write:del, read:  0, hup:del */
+	{ EPOLLIN|EPOLHUP, EPOLL_CTL_MOD },
+	/* old=hrw, write:del, read:  0, hup:xxx */
+	{ 0, 255 },
+	/* old=hrw, write:del, read:add, hup:  0 */
+	{ EPOLLIN|EPOLLHUP, EPOLL_CTL_MOD },
+	/* old=hrw, write:del, read:add, hup:add */
+	{ EPOLLIN|EPOLLHUP, EPOLL_CTL_MOD },
+	/* old=hrw, write:del, read:add, hup:del */
+	{ EPOLLIN, EPOLL_CTL_MOD },
+	/* old=hrw, write:del, read:add, hup:xxx */
+	{ 0, 255 },
+	/* old=hrw, write:del, read:del, hup:  0 */
+	{ EPOLHUP, EPOLL_CTL_MOD },
+	/* old=hrw, write:del, read:del, hup:add */
+	{ EPOLLHUP, EPOLL_CTL_MOD },
+	/* old=hrw, write:del, read:del, hup:del */
+	{ EPOLHUP, EPOLL_CTL_MOD },
+	/* old=hrw, write:del, read:del, hup:xxx */
+	{ 0, 255 },
+	/* old=hrw, write:del, read:xxx, hup:  0 */
+	{ 0, 255 },
+	/* old=hrw, write:del, read:xxx, hup:add */
+	{ 0, 255 },
+	/* old=hrw, write:del, read:xxx, hup:del */
+	{ 0, 255 },
+	/* old=hrw, write:del, read:xxx, hup:xxx */
+	{ 0, 255 },
+	/* old=hrw, write:xxx, read:  0, hup:  0 */
+	{ 0, 255 },
+	/* old=hrw, write:xxx, read:  0, hup:add */
+	{ 0, 255 },
+	/* old=hrw, write:xxx, read:  0, hup:del */
+	{ 0, 255 },
+	/* old=hrw, write:xxx, read:  0, hup:xxx */
+	{ 0, 255 },
+	/* old=hrw, write:xxx, read:add, hup:  0 */
+	{ 0, 255 },
+	/* old=hrw, write:xxx, read:add, hup:add */
+	{ 0, 255 },
+	/* old=hrw, write:xxx, read:add, hup:del */
+	{ 0, 255 },
+	/* old=hrw, write:xxx, read:add, hup:xxx */
+	{ 0, 255 },
+	/* old=hrw, write:xxx, read:del, hup:  0 */
+	{ 0, 255 },
+	/* old=hrw, write:xxx, read:del, hup:add */
+	{ 0, 255 },
+	/* old=hrw, write:xxx, read:del, hup:del */
+	{ 0, 255 },
+	/* old=hrw, write:xxx, read:del, hup:xxx */
+	{ 0, 255 },
+	/* old=hrw, write:xxx, read:xxx, hup:  0 */
+	{ 0, 255 },
+	/* old=hrw, write:xxx, read:xxx, hup:add */
+	{ 0, 255 },
+	/* old=hrw, write:xxx, read:xxx, hup:del */
+	{ 0, 255 },
+	/* old=hrw, write:xxx, read:xxx, hup:xxx */
+	{ 0, 255 },
+
 };
 
 static int
