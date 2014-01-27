@@ -709,6 +709,14 @@ bufferevent_decref_and_unlock_(struct bufferevent *bufev)
 	n_cbs += evbuffer_get_callbacks_(bufev->input, cbs+n_cbs, MAX_CBS-n_cbs);
 	n_cbs += evbuffer_get_callbacks_(bufev->output, cbs+n_cbs, MAX_CBS-n_cbs);
 
+	{
+		int i;
+		for (i = 0; i < n_cbs; ++i) {
+			printf("cbs[%d] == %p\n", i, cbs[i]);
+			EVUTIL_ASSERT(cbs[i]->evcb_arg == bufev_private);
+		}
+	}
+
 	event_callback_finalize_many_(bufev->ev_base, n_cbs, cbs,
 	    bufferevent_finalize_cb_);
 
