@@ -712,7 +712,7 @@ bufferevent_decref_and_unlock_(struct bufferevent *bufev)
 	{
 		int i;
 		for (i = 0; i < n_cbs; ++i) {
-			printf("cbs[%d] == %p\n", i, cbs[i]);
+			printf("cbs[%d] == %p; want %p\n", i, cbs[i], bufev_private);
 			EVUTIL_ASSERT(cbs[i]->evcb_arg == bufev_private);
 		}
 	}
