@@ -919,7 +919,8 @@ bufferevent_get_underlying(struct bufferevent *bev)
 static void
 bufferevent_generic_read_timeout_cb(evutil_socket_t fd, short event, void *ctx)
 {
-	struct bufferevent *bev = ctx;
+	struct bufferevent_private *bufev_private = ctx;
+	struct bufferevent *bev = &bufev_private->bev;
 	bufferevent_incref_and_lock_(bev);
 	bufferevent_disable(bev, EV_READ);
 	bufferevent_run_eventcb_(bev, BEV_EVENT_TIMEOUT|BEV_EVENT_READING, 0);
@@ -928,7 +929,8 @@ bufferevent_generic_read_timeout_cb(evutil_socket_t fd, short event, void *ctx)
 static void
 bufferevent_generic_write_timeout_cb(evutil_socket_t fd, short event, void *ctx)
 {
-	struct bufferevent *bev = ctx;
+	struct bufferevent_private *bufev_private = ctx;
+	struct bufferevent *bev = &bufev_private->bev;
 	bufferevent_incref_and_lock_(bev);
 	bufferevent_disable(bev, EV_WRITE);
 	bufferevent_run_eventcb_(bev, BEV_EVENT_TIMEOUT|BEV_EVENT_WRITING, 0);
@@ -938,10 +940,12 @@ bufferevent_generic_write_timeout_cb(evutil_socket_t fd, short event, void *ctx)
 void
 bufferevent_init_generic_timeout_cbs_(struct bufferevent *bev)
 {
+	struct bufferevent_private *bev_p =
+	    EVUTIL_UPCAST(bev, struct bufferevent_private, bev);
 	event_assign(&bev->ev_read, bev->ev_base, -1, EV_FINALIZE,
-	    bufferevent_generic_read_timeout_cb, bev);
+	    bufferevent_generic_read_timeout_cb, bev_p);
 	event_assign(&bev->ev_write, bev->ev_base, -1, EV_FINALIZE,
-	    bufferevent_generic_write_timeout_cb, bev);
+	    bufferevent_generic_write_timeout_cb, bev_p);
 }
 
 int
