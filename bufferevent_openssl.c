@@ -279,6 +279,7 @@ struct bio_data_counts {
 };
 
 struct bufferevent_openssl {
+	BEV_DECL_MAGIC
 	/* Shared fields with common bufferevent implementation code.
 	   If we were set up with an underlying bufferevent, we use the
 	   events here as timers only.  If we have an SSL, then we use
@@ -323,6 +324,8 @@ struct bufferevent_openssl {
 	unsigned state : 2;
 };
 
+#define BUFFEREVENT_OPENSSL_MAGIC 0x05510551
+
 static int be_openssl_enable(struct bufferevent *, short);
 static int be_openssl_disable(struct bufferevent *, short);
 static void be_openssl_destruct(struct bufferevent *);
@@ -330,6 +333,14 @@ static int be_openssl_adj_timeouts(struct bufferevent *);
 static int be_openssl_flush(struct bufferevent *bufev,
     short iotype, enum bufferevent_flush_mode mode);
 static int be_openssl_ctrl(struct bufferevent *, enum bufferevent_ctrl_op, union bufferevent_ctrl_data *);
+
+static inline struct bufferevent_openssl *VOID_TO_BEV_OPENSSL(void *arg);
+static inline struct bufferevent_openssl *VOID_TO_BEV_OPENSSL(void *arg)
+{
+	struct bufferevent_openssl *bev_o = arg;
+	CHECK_BEV_MAGIC(bev_o, BUFFEREVENT_OPENSSL_MAGIC);
+	return bev_o;
+}
 
 const struct bufferevent_ops bufferevent_ops_openssl = {
 	"ssl",
@@ -890,21 +901,21 @@ consider_writing(struct bufferevent_openssl *bev_ssl)
 static void
 be_openssl_readcb(struct bufferevent *bev_base, void *ctx)
 {
-	struct bufferevent_openssl *bev_ssl = ctx;
+	struct bufferevent_openssl *bev_ssl = VOID_TO_BEV_OPENSSL(ctx);
 	consider_reading(bev_ssl);
 }
 
 static void
 be_openssl_writecb(struct bufferevent *bev_base, void *ctx)
 {
-	struct bufferevent_openssl *bev_ssl = ctx;
+	struct bufferevent_openssl *bev_ssl = VOID_TO_BEV_OPENSSL(ctx);
 	consider_writing(bev_ssl);
 }
 
 static void
 be_openssl_eventcb(struct bufferevent *bev_base, short what, void *ctx)
 {
-	struct bufferevent_openssl *bev_ssl = ctx;
+	struct bufferevent_openssl *bev_ssl = VOID_TO_BEV_OPENSSL(ctx);
 	int event = 0;
 
 	if (what & BEV_EVENT_EOF) {
@@ -929,7 +940,7 @@ be_openssl_eventcb(struct bufferevent *bev_base, short what, void *ctx)
 static void
 be_openssl_readeventcb(evutil_socket_t fd, short what, void *ptr)
 {
-	struct bufferevent_openssl *bev_ssl = ptr;
+	struct bufferevent_openssl *bev_ssl = VOID_TO_BEV_OPENSSL(ptr);
 	_bufferevent_incref_and_lock(&bev_ssl->bev.bev);
 	if (what == EV_TIMEOUT) {
 		_bufferevent_run_eventcb(&bev_ssl->bev.bev,
@@ -943,7 +954,7 @@ be_openssl_readeventcb(evutil_socket_t fd, short what, void *ptr)
 static void
 be_openssl_writeeventcb(evutil_socket_t fd, short what, void *ptr)
 {
-	struct bufferevent_openssl *bev_ssl = ptr;
+	struct bufferevent_openssl *bev_ssl = VOID_TO_BEV_OPENSSL(ptr);
 	_bufferevent_incref_and_lock(&bev_ssl->bev.bev);
 	if (what == EV_TIMEOUT) {
 		_bufferevent_run_eventcb(&bev_ssl->bev.bev,
@@ -1040,14 +1051,14 @@ do_handshake(struct bufferevent_openssl *bev_ssl)
 static void
 be_openssl_handshakecb(struct bufferevent *bev_base, void *ctx)
 {
-	struct bufferevent_openssl *bev_ssl = ctx;
+	struct bufferevent_openssl *bev_ssl = VOID_TO_BEV_OPENSSL(ctx);
 	do_handshake(bev_ssl);/* XXX handle failure */
 }
 
 static void
 be_openssl_handshakeeventcb(evutil_socket_t fd, short what, void *ptr)
 {
-	struct bufferevent_openssl *bev_ssl = ptr;
+	struct bufferevent_openssl *bev_ssl = VOID_TO_BEV_OPENSSL(ptr);
 
 	_bufferevent_incref_and_lock(&bev_ssl->bev.bev);
 	if (what & EV_TIMEOUT) {
@@ -1108,7 +1119,7 @@ static void
 be_openssl_outbuf_cb(struct evbuffer *buf,
     const struct evbuffer_cb_info *cbinfo, void *arg)
 {
-	struct bufferevent_openssl *bev_ssl = arg;
+	struct bufferevent_openssl *bev_ssl = VOID_TO_BEV_OPENSSL(arg);
 	int r = 0;
 	/* XXX need to hold a reference here. */
 
@@ -1303,6 +1314,7 @@ bufferevent_openssl_new_impl(struct event_base *base,
 	if (!(bev_ssl = mm_calloc(1, sizeof(struct bufferevent_openssl))))
 		goto err;
 
+	INIT_BEV_MAGIC(bev_ssl, BUFFEREVENT_OPENSSL_MAGIC);
 	bev_p = &bev_ssl->bev;
 
 	if (bufferevent_init_common(bev_p, base,

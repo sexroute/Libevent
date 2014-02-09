@@ -63,7 +63,9 @@ extern "C" {
 
 typedef ev_uint16_t bufferevent_suspend_flags;
 
+#define BEV_RATELIM_GROUP_MAGIC 0xee995501
 struct bufferevent_rate_limit_group {
+	BEV_DECL_MAGIC
 	/** List of all members in the group */
 	TAILQ_HEAD(rlim_group_member_list, bufferevent_private) members;
 	/** Current limits for the group. */
@@ -132,9 +134,22 @@ struct bufferevent_rate_limit {
 	struct event refill_bucket_event;
 };
 
+#ifdef EV_DEBUG_BUFFEREVENT_STRUCTS
+#define INIT_BEV_MAGIC(b,m) ((b)->magic = (m))
+#define CHECK_BEV_MAGIC(b,m)				\
+	do {						\
+		EVUTIL_ASSERT((b)->magic == (m));	\
+	} while (0)
+#else
+#define INIT_BEV_MAGIC(b,m) ((void)0)
+#define CHECK_BEV_MAGIC(b,m) ((void)0)
+#endif
+
 /** Parts of the bufferevent structure that are shared among all bufferevent
  * types, but not exposed in bufferevent_struct.h. */
 struct bufferevent_private {
+	BEV_DECL_MAGIC
+
 	/** The underlying bufferevent structure. */
 	struct bufferevent bev;
 
@@ -192,6 +207,26 @@ struct bufferevent_private {
 	/** Rate-limiting information for this bufferevent */
 	struct bufferevent_rate_limit *rate_limiting;
 };
+#define BUFFEREVENT_MAGIC 0x45459009
+#define BUFFEREVENT_PRIVATE_MAGIC 0x16060842
+
+static inline struct bufferevent *VOID_TO_BEV(void *);
+static inline struct bufferevent_private *VOID_TO_BEVP(void *);
+
+static inline struct bufferevent *
+VOID_TO_BEV(void *p)
+{
+	struct bufferevent *bev = p;
+	CHECK_BEV_MAGIC(bev, BUFFEREVENT_MAGIC);
+	return bev;
+}
+static inline struct bufferevent_private *
+VOID_TO_BEVP(void *p)
+{
+	struct bufferevent_private *bev = p;
+	CHECK_BEV_MAGIC(bev, BUFFEREVENT_PRIVATE_MAGIC);
+	return bev;
+}
 
 /** Possible operations for a control callback. */
 enum bufferevent_ctrl_op {

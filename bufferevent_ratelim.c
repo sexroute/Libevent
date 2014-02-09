@@ -397,7 +397,7 @@ _bev_refill_callback(evutil_socket_t fd, short what, void *arg)
 {
 	unsigned tick;
 	struct timeval now;
-	struct bufferevent_private *bev = arg;
+	struct bufferevent_private *bev = VOID_TO_BEVP(arg);
 	int again = 0;
 	BEV_LOCK(&bev->bev);
 	if (!bev->rate_limiting || !bev->rate_limiting->cfg) {
@@ -530,6 +530,7 @@ _bev_group_refill_callback(evutil_socket_t fd, short what, void *arg)
 	struct bufferevent_rate_limit_group *g = arg;
 	unsigned tick;
 	struct timeval now;
+	CHECK_BEV_MAGIC(g, BEV_RATELIM_GROUP_MAGIC);
 
 	event_base_gettimeofday_cached(event_get_base(&g->master_refill_event), &now);
 
@@ -648,6 +649,7 @@ bufferevent_rate_limit_group_new(struct event_base *base,
 	g = mm_calloc(1, sizeof(struct bufferevent_rate_limit_group));
 	if (!g)
 		return NULL;
+	INIT_BEV_MAGIC(g, BEV_RATELIM_GROUP_MAGIC);
 	memcpy(&g->rate_limit_cfg, cfg, sizeof(g->rate_limit_cfg));
 	TAILQ_INIT(&g->members);
 

@@ -118,7 +118,7 @@ bufferevent_inbuf_wm_cb(struct evbuffer *buf,
     const struct evbuffer_cb_info *cbinfo,
     void *arg)
 {
-	struct bufferevent *bufev = arg;
+	struct bufferevent *bufev = VOID_TO_BEV(arg);
 	size_t size;
 
 	size = evbuffer_get_length(buf);
@@ -132,7 +132,7 @@ bufferevent_inbuf_wm_cb(struct evbuffer *buf,
 static void
 bufferevent_run_deferred_callbacks_locked(struct deferred_cb *_, void *arg)
 {
-	struct bufferevent_private *bufev_private = arg;
+	struct bufferevent_private *bufev_private = VOID_TO_BEVP(arg);
 	struct bufferevent *bufev = &bufev_private->bev;
 
 	BEV_LOCK(bufev);
@@ -165,7 +165,7 @@ bufferevent_run_deferred_callbacks_locked(struct deferred_cb *_, void *arg)
 static void
 bufferevent_run_deferred_callbacks_unlocked(struct deferred_cb *_, void *arg)
 {
-	struct bufferevent_private *bufev_private = arg;
+	struct bufferevent_private *bufev_private = VOID_TO_BEVP(arg);
 	struct bufferevent *bufev = &bufev_private->bev;
 
 	BEV_LOCK(bufev);
@@ -275,6 +275,9 @@ bufferevent_init_common(struct bufferevent_private *bufev_private,
     enum bufferevent_options options)
 {
 	struct bufferevent *bufev = &bufev_private->bev;
+
+	INIT_BEV_MAGIC(bufev_private, BUFFEREVENT_PRIVATE_MAGIC);
+	INIT_BEV_MAGIC(bufev, BUFFEREVENT_MAGIC);
 
 	if (!bufev->input) {
 		if ((bufev->input = evbuffer_new()) == NULL)
@@ -659,8 +662,10 @@ _bufferevent_decref_and_unlock(struct bufferevent *bufev)
 	 * XXX Should we/can we just refcount evbuffer/bufferevent locks?
 	 * It would probably save us some headaches.
 	 */
-	if (underlying)
+	if (underlying) {
+		printf("FREE UNDERLYING\n");
 		bufferevent_decref(underlying);
+	}
 
 	return 1;
 }
@@ -791,7 +796,7 @@ bufferevent_get_underlying(struct bufferevent *bev)
 static void
 bufferevent_generic_read_timeout_cb(evutil_socket_t fd, short event, void *ctx)
 {
-	struct bufferevent *bev = ctx;
+	struct bufferevent *bev = VOID_TO_BEV(ctx);
 	_bufferevent_incref_and_lock(bev);
 	bufferevent_disable(bev, EV_READ);
 	_bufferevent_run_eventcb(bev, BEV_EVENT_TIMEOUT|BEV_EVENT_READING);
@@ -800,7 +805,7 @@ bufferevent_generic_read_timeout_cb(evutil_socket_t fd, short event, void *ctx)
 static void
 bufferevent_generic_write_timeout_cb(evutil_socket_t fd, short event, void *ctx)
 {
-	struct bufferevent *bev = ctx;
+	struct bufferevent *bev = VOID_TO_BEV(ctx);
 	_bufferevent_incref_and_lock(bev);
 	bufferevent_disable(bev, EV_WRITE);
 	_bufferevent_run_eventcb(bev, BEV_EVENT_TIMEOUT|BEV_EVENT_WRITING);

@@ -59,6 +59,14 @@ struct event_watermark {
 	size_t high;
 };
 
+//#define EV_DEBUG_BUFFEREVENT_STRUCTS
+
+#ifdef EV_DEBUG_BUFFEREVENT_STRUCTS
+#define BEV_DECL_MAGIC ev_uint32_t magic;
+#else
+#define BEV_DECL_MAGIC
+#endif
+
 /**
   Shared implementation of a bufferevent.
 
@@ -68,6 +76,7 @@ struct event_watermark {
   it is fairly volatile, and WILL change in future versions of the code.
 **/
 struct bufferevent {
+	BEV_DECL_MAGIC
 	/** Event base for which this bufferevent was created. */
 	struct event_base *ev_base;
 	/** Pointer to a table of function pointers to set up how this

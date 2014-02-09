@@ -75,7 +75,10 @@ static void be_async_destruct(struct bufferevent *);
 static int be_async_flush(struct bufferevent *, short, enum bufferevent_flush_mode);
 static int be_async_ctrl(struct bufferevent *, enum bufferevent_ctrl_op, union bufferevent_ctrl_data *);
 
+#define BUFFEREVENT_ASYNC_MAGIC 0x0f001154
+
 struct bufferevent_async {
+	BEV_DECL_MAGIC
 	struct bufferevent_private bev;
 	struct event_overlapped connect_overlapped;
 	struct event_overlapped read_overlapped;
@@ -86,6 +89,14 @@ struct bufferevent_async {
 	unsigned read_added : 1;
 	unsigned write_added : 1;
 };
+
+static inline struct bufferevent_async *VOID_TO_BEV_ASYNC(void *arg);
+static inline struct bufferevent_async *VOID_TO_BEV_ASYNC(void *arg)
+{
+	struct bufferevent_async *bev_a = arg;
+	CHECK_BEV_MAGIC(bev_a, BUFFEREVENT_ASYNC_MAGIC);
+	return bev_a;
+}
 
 const struct bufferevent_ops bufferevent_ops_async = {
 	"socket_async",
@@ -284,7 +295,7 @@ be_async_outbuf_callback(struct evbuffer *buf,
     const struct evbuffer_cb_info *cbinfo,
     void *arg)
 {
-	struct bufferevent *bev = arg;
+	struct bufferevent *bev = VOID_TO_BEV(arg);
 	struct bufferevent_async *bev_async = upcast(bev);
 
 	/* If we added data to the outbuf and were not writing before,
@@ -303,7 +314,7 @@ be_async_inbuf_callback(struct evbuffer *buf,
     const struct evbuffer_cb_info *cbinfo,
     void *arg)
 {
-	struct bufferevent *bev = arg;
+	struct bufferevent *bev = VOID_TO_BEV(arg);
 	struct bufferevent_async *bev_async = upcast(bev);
 
 	/* If we drained data from the inbuf and were not reading before,
@@ -547,6 +558,8 @@ bufferevent_async_new(struct event_base *base,
 
 	if (!(bev_a = mm_calloc(1, sizeof(struct bufferevent_async))))
 		return NULL;
+
+	INIT_BEV_MAGIC(bev_a, BUFFEREVENT_ASYNC_MAGIC);
 
 	bev = &bev_a->bev.bev;
 	if (!(bev->input = evbuffer_overlapped_new(fd))) {

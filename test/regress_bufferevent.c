@@ -153,6 +153,9 @@ test_bufferevent_impl(int use_pair)
 	tt_int_op(bufferevent_get_enabled(bev1), ==, EV_WRITE);
 	tt_int_op(bufferevent_get_enabled(bev2), ==, EV_WRITE|EV_READ);
 
+	if (use_pair)
+		tt_ptr_op(bufferevent_pair_get_partner(bev2), ==, bev1);
+
 	for (i = 0; i < (int)sizeof(buffer); i++)
 		buffer[i] = i;
 
@@ -160,6 +163,8 @@ test_bufferevent_impl(int use_pair)
 
 	event_dispatch();
 
+	if (use_pair)
+		tt_ptr_op(bufferevent_pair_get_partner(bev2), ==, bev1);
 	bufferevent_free(bev1);
 	tt_ptr_op(bufferevent_pair_get_partner(bev2), ==, NULL);
 	bufferevent_free(bev2);

@@ -72,6 +72,8 @@ static void bufferevent_filtered_outbuf_cb(struct evbuffer *buf,
     const struct evbuffer_cb_info *info, void *arg);
 
 struct bufferevent_filtered {
+	BEV_DECL_MAGIC
+
 	struct bufferevent_private bev;
 
 	/** The bufferevent that we read/write filtered data from/to. */
@@ -102,6 +104,15 @@ const struct bufferevent_ops bufferevent_ops_filter = {
 	be_filter_flush,
 	be_filter_ctrl,
 };
+
+#define BUFFEREVENT_FILTERED_MAGIC 0xf117343d
+static inline struct bufferevent_filtered *VOID_TO_BEV_FILT(void *arg);
+static inline struct bufferevent_filtered *VOID_TO_BEV_FILT(void *arg)
+{
+	struct bufferevent_filtered *bev_f = arg;
+	CHECK_BEV_MAGIC(bev_f, BUFFEREVENT_FILTERED_MAGIC);
+	return bev_f;
+}
 
 /* Given a bufferevent that's really the bev filter of a bufferevent_filtered,
  * return that bufferevent_filtered. Returns NULL otherwise.*/
@@ -179,6 +190,7 @@ bufferevent_filter_new(struct bufferevent *underlying,
 	bufev_f = mm_calloc(1, sizeof(struct bufferevent_filtered));
 	if (!bufev_f)
 		return NULL;
+	INIT_BEV_MAGIC(bufev_f, BUFFEREVENT_FILTERED_MAGIC);
 
 	if (bufferevent_init_common(&bufev_f->bev, underlying->ev_base,
 				    &bufferevent_ops_filter, tmp_options) < 0) {
@@ -396,7 +408,7 @@ static void
 bufferevent_filtered_outbuf_cb(struct evbuffer *buf,
     const struct evbuffer_cb_info *cbinfo, void *arg)
 {
-	struct bufferevent_filtered *bevf = arg;
+	struct bufferevent_filtered *bevf = VOID_TO_BEV_FILT(arg);
 	struct bufferevent *bev = downcast(bevf);
 
 	if (cbinfo->n_added) {
@@ -413,7 +425,7 @@ bufferevent_filtered_outbuf_cb(struct evbuffer *buf,
 static void
 be_filter_readcb(struct bufferevent *underlying, void *_me)
 {
-	struct bufferevent_filtered *bevf = _me;
+	struct bufferevent_filtered *bevf = VOID_TO_BEV_FILT(_me);
 	enum bufferevent_filter_result res;
 	enum bufferevent_flush_mode state;
 	struct bufferevent *bufev = downcast(bevf);
@@ -445,7 +457,7 @@ be_filter_readcb(struct bufferevent *underlying, void *_me)
 static void
 be_filter_writecb(struct bufferevent *underlying, void *_me)
 {
-	struct bufferevent_filtered *bevf = _me;
+	struct bufferevent_filtered *bevf = VOID_TO_BEV_FILT(_me);
 	struct bufferevent *bev = downcast(bevf);
 	int processed_any = 0;
 
@@ -458,7 +470,7 @@ be_filter_writecb(struct bufferevent *underlying, void *_me)
 static void
 be_filter_eventcb(struct bufferevent *underlying, short what, void *_me)
 {
-	struct bufferevent_filtered *bevf = _me;
+	struct bufferevent_filtered *bevf = VOID_TO_BEV_FILT(_me);
 	struct bufferevent *bev = downcast(bevf);
 
 	_bufferevent_incref_and_lock(bev);

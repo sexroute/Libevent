@@ -43,9 +43,18 @@
 #include "util-internal.h"
 
 struct bufferevent_pair {
+	BEV_DECL_MAGIC
 	struct bufferevent_private bev;
 	struct bufferevent_pair *partner;
 };
+#define BUFFEREVENT_PAIR_MAGIC 0x9a149a14
+static inline struct bufferevent_pair *VOID_TO_BEV_PAIR(void *arg);
+static inline struct bufferevent_pair *VOID_TO_BEV_PAIR(void *arg)
+{
+	struct bufferevent_pair *bev_pair = arg;
+	CHECK_BEV_MAGIC(bev_pair, BUFFEREVENT_PAIR_MAGIC);
+	return bev_pair;
+}
 
 
 /* Given a bufferevent that's really a bev part of a bufferevent_pair,
@@ -94,6 +103,7 @@ bufferevent_pair_elt_new(struct event_base *base,
 	struct bufferevent_pair *bufev;
 	if (! (bufev = mm_calloc(1, sizeof(struct bufferevent_pair))))
 		return NULL;
+	INIT_BEV_MAGIC(bufev, BUFFEREVENT_PAIR_MAGIC);
 	if (bufferevent_init_common(&bufev->bev, base, &bufferevent_ops_pair,
 		options)) {
 		mm_free(bufev);
@@ -210,7 +220,7 @@ static void
 be_pair_outbuf_cb(struct evbuffer *outbuf,
     const struct evbuffer_cb_info *info, void *arg)
 {
-	struct bufferevent_pair *bev_pair = arg;
+	struct bufferevent_pair *bev_pair = VOID_TO_BEV_PAIR(arg);
 	struct bufferevent_pair *partner = bev_pair->partner;
 
 	incref_and_lock(downcast(bev_pair));
